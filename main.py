@@ -12,6 +12,7 @@ from db import DBhelper
 import re
 import openai
 from dotenv import load_dotenv
+from opencc import OpenCC
 load_dotenv()
 #
 logger = logging.getLogger()
@@ -30,7 +31,7 @@ vip = eval(os.getenv('VIP'))
 _channel = eval(os.getenv('CHANNEL'))
 
 
-
+cc = OpenCC('s2twp')
 app = App(token=SLACK_BOT_TOKEN, name="Bot")
 date = datetime.today().strftime('%Y/%m/%d')
 
@@ -107,7 +108,9 @@ def filter_ans(gpt3_ans, googleSearchResult):
 		if bw in gpt3_ans:
 			gpt3_ans = gpt3_ans.split('，')
 			gpt3_ans = ('，').join(i for i in gpt3_ans if bw not in i)
-	return gpt3_ans
+	######
+	gpt3_ans = '親愛的顧客您好，'+'，'.join(gpt3_ans.split('，')[1:])
+	return cc.convert(gpt3_ans)
 
 def get_keyword(q):
 	message = [{'role': 'user', 'content': f'幫我從"{q}"選出一個重要詞彙,只要回答詞彙就好'}]
