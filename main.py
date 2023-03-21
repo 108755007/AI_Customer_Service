@@ -13,7 +13,7 @@ import re
 import openai
 from dotenv import load_dotenv
 load_dotenv()
-
+#
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO,
@@ -97,13 +97,11 @@ def message_gpt(history, text):
 def filter_ans(gpt3_ans, googleSearchResult):
 	if googleSearchResult == '_':
 		return gpt3_ans
-	for v in googleSearchResult:
-		url = v.get('link')
-		url_ = re.findall(r'.+detail/[\w]+/', url)[0] if 'detail' in url else url
-		if f'<{url}|查看更多>' not in gpt3_ans:
-			gpt3_ans = gpt3_ans.replace(f'{url}',f'<{url_}|查看更多>')
-			if f'<{url_}|查看更多>' not in gpt3_ans:
-				gpt3_ans = gpt3_ans.replace(f'{url_}', f'<{url_}|查看更多>')
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.-\/]+)\|.*>)', gpt3_ans):
+		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
+	for url in re.findall(r'https?:\/\/[\da-z\.-\/]+', gpt3_ans):
+		print(url)
+		gpt3_ans = gpt3_ans.replace(url, '<' + url + '|查看更多>')
 	ban_word = ['抱歉', '錯誤', '對不起']
 	for bw in ban_word:
 		if bw in gpt3_ans:
@@ -193,13 +191,7 @@ def show_bert_qa(message, body, say):
 			elif gpt_query == '無搜尋結果':
 				gpt_query = text.replace('你們', '全家電商').replace('妳們', '全家電商').replace('你', '全家電商').replace('妳', '全家電商')
 			print(gpt_query)
-			m = 0
-			while m == 0:
-				try:
-					completion = openai.ChatCompletion.create(model="gpt-3.5-turbo",messages=[{"role": "user", "content": f"{gpt_query}"}])
-					m = 1
-				except:
-					pass
+			completion = openai.ChatCompletion.create(model="gpt-3.5-turbo",  messages=[{"role": "user", "content": f"{gpt_query}"}])
 			gpt3_answer	= completion['choices'][0]['message']['content']
 			print(gpt3_answer)
 			gpt3_answer_f = filter_ans(gpt3_answer, gs)
@@ -267,13 +259,7 @@ def handle_some_action(ack, body, say):
 	say(text=f"請稍等為您提供其他答案...", channel=body['container']['channel_id'],thread_ts=body['container']['thread_ts'])
 	text = body['actions'][0]['value']
 	gpt_query = webchatgpt_google(text)
-	m = 0
-	while m == 0:
-		try:
-			completion = openai.ChatCompletion.create(model="gpt-3.5-turbo",messages=[{"role": "user", "content": f"{gpt_query}"}])
-			m = 1
-		except:
-			pass
+	completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{gpt_query}"}])
 	QA_report_df = pd.DataFrame([[body['user']['id'],ts,text,gpt_query,completion['choices'][0]['message']['content'],1]],columns=['user_id', 'ts','question','question1', 'answer1','counts'])
 	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_webchatgpt', chunk_size=100000,is_ssh=False)
 	say(text=f"{completion['choices'][0]['message']['content']}", channel=body['container']['channel_id'],thread_ts=body['container']['thread_ts'])
