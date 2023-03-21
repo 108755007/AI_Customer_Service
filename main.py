@@ -36,7 +36,8 @@ app = App(token=SLACK_BOT_TOKEN, name="Bot")
 date = datetime.today().strftime('%Y/%m/%d')
 
 def webchatgpt_google(keyword, q, web_id='nineyi000360'):
-	html = f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q={keyword}'
+
+	html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q={keyword}'
 	r = requests.get(html)
 	count = 0
 	while r.status_code != 200 and count < 10:
@@ -115,12 +116,20 @@ def filter_ans(gpt3_ans, googleSearchResult):
 def get_keyword(q):
 	message = [{'role': 'user', 'content': f'幫我從"{q}"選出一個重要詞彙,只要回答詞彙就好'}]
 	completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=message)
-	return completion['choices'][0]['message']['content'].replace('\n','').replace('"','')
+	return completion['choices'][0]['message']['content'].replace('\n','').replace('"','').replace('。','')
 
 def is_goods(keyword):
 	message = [{'role': 'user', 'content': f'幫我判斷"{keyword}"是否是一個商品,只要回答"True"或"False"'}]
 	completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=message)
 	return completion['choices'][0]['message']['content'].replace('\n','').replace('"','').replace("。",'')
+
+def update_history(user_id,ts,counts,question,keyword,answer):
+	QA_report_df = pd.DataFrame([[user_id, ts, counts, question, keyword, answer, datetime.now()]],columns=['user_id', 'ts', 'counts', 'question', 'keyword', 'answer','add_time'])
+	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt_history', chunk_size=100000,is_ssh=False)
+	return
+
+
+
 
 @app.message(re.compile(".*"))  # type: ignore
 def show_bert_qa(message, body, say):
@@ -202,6 +211,7 @@ def show_bert_qa(message, body, say):
 			print(gpt3_history)
 			QA_report_df = pd.DataFrame([[user_id, ts, 1, gpt_query, gpt3_answer_f, gpt3_history, datetime.now()]],columns=['user_id', 'ts', 'counts', 'last_question', 'last_answer', 'q_a_history', 'add_time'])
 			DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt', chunk_size=100000,is_ssh=False)
+			update_history(user_id,ts,1,text,keyword,gpt3_answer_f)
 			say(text=f"{gpt3_answer_f}", channel=dm_channel,thread_ts=ts)
 
 	else:
@@ -237,6 +247,7 @@ def show_bert_qa(message, body, say):
 		df_history['last_question'] = gpt_query
 		df_history['last_answer'] = gpt3_answer_f
 		df_history['q_a_history'] = json.dumps(history)
+		update_history(user_id, ts, 1, text, keyword, gpt3_answer_f)
 		DBhelper.ExecuteUpdatebyChunk(df_history, db='jupiter_new', table='slack_chatgpt', chunk_size=100000, is_ssh=False)
 		say(text=f"{gpt3_answer_f}", channel=dm_channel, thread_ts=ts)
 	return
