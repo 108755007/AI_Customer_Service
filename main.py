@@ -39,6 +39,21 @@ def ask_gpt(message, model="gpt-3.5-turbo"):
 	completion = openai.ChatCompletion.create(model=model, messages=message)
 	return completion['choices'][0]['message']['content']
 
+def question_pos_parser(question):
+	stopSwitch, retry = False, 3
+	mappingDict = {'noun': '名詞', 'verb': '動詞'}
+	while not stopSwitch and retry:
+		question_keywords = ask_gpt(f'Choose {min(len(question) + 2 // 3, 3)} important words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
+		keyword_pos = {}
+		for k in question_keywords.split(','):
+			k = k.split('/')
+			if len(k) != 2:
+				continue
+			keyword_pos[k[0]] = mappingDict.get(k[1], k[1])
+		stopSwitch = len(keyword_pos) > 0
+		retry -= 1
+	return keyword_pos
+
 def get_gpt_query(keyword, query, web_id='nineyi000360'):
 	'''
 	:param keyword: for google search
@@ -99,7 +114,7 @@ def filter_ans(gpt3_ans):
 	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.-\/]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = cc.convert(gpt3_ans)
-	for url in set(re.findall(r'https?:\/\/[\da-z\.-\/]+', gpt3_ans)):
+	for url in set(re.findall(r'https?:\/\/[\w\.-\/]+', gpt3_ans)):
 		print(url)
 		gpt3_ans = gpt3_ans.replace(url, '<' + url + '|查看更多>')
 	ban_word = ['抱歉', '錯誤', '對不起']
@@ -182,8 +197,10 @@ def show_bert_qa(message, body, say):
 			],channel=dm_channel,thread_ts=ts)
 		else:
 			say(text=f"請稍等為您提供回覆...", channel=dm_channel,thread_ts=ts)
-			keyword = ask_gpt(f'幫我從"{text}"選出一個重要詞彙,只要回答詞彙就好').replace('\n','').replace('"','').replace("。",'')
-			print(keyword)
+			keyword_pos = question_pos_parser(text)
+			keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
+			if not keyword:
+				keyword = ask_gpt(f'幫我從"{text}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')
 			gpt_query = get_gpt_query(keyword, text)
 			if gpt_query == '網頁錯誤':
 				say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
@@ -208,7 +225,10 @@ def show_bert_qa(message, body, say):
 		data = DBhelper('jupiter_new').ExecuteSelect(query)
 		df_history = pd.DataFrame(data, columns=['id', 'counts', 'last_question', 'last_answer', 'q_a_history'])
 		print(json.loads(df_history['q_a_history'].iloc[0]))
-		keyword = ask_gpt(f'幫我從"{text}"選出一個重要詞彙,只要回答詞彙就好').replace('\n','').replace('"','').replace("。",'')
+		keyword_pos = question_pos_parser(text)
+		keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
+		if not keyword:
+			keyword = ask_gpt(f'幫我從"{text}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"', '').replace("。", '')
 		print(keyword)
 		gpt_query = get_gpt_query(keyword, text)
 		print(gpt_query)
