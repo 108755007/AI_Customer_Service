@@ -29,6 +29,9 @@ _channel = eval(os.getenv('CHANNEL'))
 app = App(token=SLACK_BOT_TOKEN, name="Bot")
 cc = OpenCC('s2twp')
 date = datetime.today().strftime('%Y/%m/%d')
+ts_set = set()
+actions_ts = set()
+now_ts = datetime.timestamp(datetime.now())
 
 def ask_gpt(message, model="gpt-3.5-turbo"):
 	if type(message) == str:
@@ -92,15 +95,11 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided web search results, write a comprehensive reply to the given query. Make sure to cite results using [[number](URL)] notation after the reference. If the provided search results refer to multiple subjects with the same name, write separate answers for each subject.\nQuery: {query}\nReply in 繁體中文\n"""
 	return chatgpt_query
 
-ts_set = set()
-actions_ts = set()
-now_ts = datetime.timestamp(datetime.now())
-
 def filter_ans(gpt3_ans):
 	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.-\/]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = cc.convert(gpt3_ans)
-	for url in re.findall(r'https?:\/\/[\da-z\.-\/]+', gpt3_ans):
+	for url in set(re.findall(r'https?:\/\/[\da-z\.-\/]+', gpt3_ans)):
 		print(url)
 		gpt3_ans = gpt3_ans.replace(url, '<' + url + '|查看更多>')
 	ban_word = ['抱歉', '錯誤', '對不起']
