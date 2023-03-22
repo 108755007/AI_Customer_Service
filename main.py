@@ -140,7 +140,6 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	QA_report_df = pd.DataFrame(data, columns=['id', 'counts', 'question', 'answer', 'q_a_history'])
 
 	# Step 1: get keyword from chatGPT
-	message = "有賣什麼日本的便當"
 	keyword_pos = question_pos_parser(message)
 	keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
 	if not keyword:
