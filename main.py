@@ -10,6 +10,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
 from db import DBhelper
+DEBUG = True
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,8 +24,9 @@ google_serch_key = os.getenv('GOOGLE_SERCH_KEY')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 CX = eval(os.getenv('CX'))
-vip = eval(os.getenv('VIP'))
-_channel = eval(os.getenv('CHANNEL'))
+VIP = eval(os.getenv('VIP'))
+VVIP = eval(os.getenv('VVIP'))
+CHANNEL = eval(os.getenv('CHANNEL'))
 
 app = App(token=SLACK_BOT_TOKEN, name="Bot")
 cc = OpenCC('s2twp')
@@ -45,7 +47,7 @@ def question_pos_parser(question):
 	forbidden_words = {'client_msg_id'}
 	while not stopSwitch and retry:
 		print('ask')
-		question_keywords = ask_gpt(f'Choose {min(len(question) + 2 // 3, 3)} important words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
+		question_keywords = ask_gpt(f'Choose the {min(len(question) + 2 // 3, 3)} most important words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
 		print('ask_finished')
 		keyword_pos = {}
 		for k in question_keywords.split(','):
@@ -80,15 +82,19 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 		Query: {question}
 		Reply in 繁體中文
 	'''
-	html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q={keyword}'
-	stopSwitch, count, result = False, 10, None
-	while not stopSwitch and count:
-		print(f'第{11-count}次搜尋')
-		response = requests.get(html)
-		if response:
-			stopSwitch = response.status_code == 200
-			result = response.json().get('items')
-		count -= 1
+	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q={keyword}',
+			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q={keyword}']
+	for html in htmls:
+		stopSwitch, count, result = False, 10, None
+		while not stopSwitch and count:
+			print(f'第{11-count}次搜尋')
+			response = requests.get(html)
+			if response:
+				stopSwitch = response.status_code == 200
+				result = response.json().get('items')
+			count -= 1
+		if stopSwitch:
+			break
 	if not count: return '網頁錯誤'
 	if not result: return '無搜尋結果'
 	linkSet = set()
@@ -134,6 +140,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	QA_report_df = pd.DataFrame(data, columns=['id', 'counts', 'question', 'answer', 'q_a_history'])
 
 	# Step 1: get keyword from chatGPT
+	message = "有賣什麼日本的便當"
 	keyword_pos = question_pos_parser(message)
 	keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
 	if not keyword:
@@ -193,9 +200,12 @@ def show_bert_qa(message, body, say):
 	if ts in ts_set or float(now_ts) > float(ts):
 		return
 	ts_set.add(ts)
-	if dm_channel not in _channel:
+	if dm_channel not in CHANNEL:
 		return
-	if user_id not in vip:
+	if user_id not in VIP:
+		return
+	if DEBUG and user_id not in VVIP:
+		say(text=f"對不起！目前正在維修中,請稍後再嘗試。", channel=dm_channel, thread_ts=ts)
 		return
 	if not thread_ts:
 		if body.get('event').get('blocks')[0].get('text'):
