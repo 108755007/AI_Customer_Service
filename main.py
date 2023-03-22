@@ -87,7 +87,7 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 			result = response.json().get('items')
 		count -=1
 	if not count: return '網頁錯誤'
-	if not result: return '無搜尋結果', '_'
+	if not result: return '無搜尋結果'
 	linkSet = set()
 	chatgpt_query = """\nWeb search results:"""
 	for v in result:
@@ -201,13 +201,15 @@ def show_bert_qa(message, body, say):
 			keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
 			if not keyword:
 				keyword = ask_gpt(f'幫我從"{text}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')
+			print(keyword)
 			gpt_query = get_gpt_query(keyword, text)
 			if gpt_query == '網頁錯誤':
 				say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
 				ts_set.add(ts)
 				return
 			elif gpt_query == '無搜尋結果':
-				gpt_query = text.replace('你們', '全家電商').replace('妳們', '全家電商').replace('你', '全家電商').replace('妳', '全家電商')
+				say(text=f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。", channel=dm_channel, thread_ts=ts)
+				return
 			print(gpt_query)
 			gpt3_answer	= ask_gpt(gpt_query)
 			print(gpt3_answer)
@@ -237,7 +239,8 @@ def show_bert_qa(message, body, say):
 			ts_set.add(ts)
 			return
 		elif gpt_query == '無搜尋結果':
-			gpt_query = text.replace('你們', '全家電商').replace('妳們', '全家電商').replace('你', '全家電商').replace('妳','全家電商')
+			say(text=f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。", channel=dm_channel, thread_ts=ts)
+			return
 		history = json.loads(df_history['q_a_history'].iloc[0])
 		history.append({"role": "user", "content": f"{gpt_query}"})
 		print(history)
