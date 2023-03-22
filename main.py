@@ -1,5 +1,6 @@
 import os, sys, logging
 import re, json, requests
+import itertools
 from dotenv import load_dotenv
 sys.path.append("..")
 load_dotenv()
@@ -10,7 +11,8 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
 from db import DBhelper
-DEBUG = True
+
+DEBUG = False
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -82,20 +84,30 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 		Query: {question}
 		Reply in 繁體中文
 	'''
-	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q={keyword}',
-			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q={keyword}']
-	for html in htmls:
-		stopSwitch, count, result = False, 10, None
-		while not stopSwitch and count:
-			print(f'第{11-count}次搜尋')
-			response = requests.get(html)
-			if response:
-				stopSwitch = response.status_code == 200
-				result = response.json().get('items')
-			count -= 1
-		if stopSwitch:
-			break
-	if not count: return '網頁錯誤'
+	keyword = keyword.split('+')
+	keyword_list = []
+	for i in range(len(keyword), 0, -1):
+		keyword_list += list(itertools.combinations(keyword, i))
+	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q=',
+			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q=']
+
+	for kw in keyword_list:
+		kw = '+'.join(kw)
+		print('搜尋關鍵字:\t', kw)
+		for html in htmls:
+			html += kw
+			stopSwitch, count, result = False, 10, None
+			while not stopSwitch and count:
+				print(f'第{11-count}次搜尋')
+				response = requests.get(html)
+				if response:
+					stopSwitch = response.status_code == 200
+					result = response.json().get('items')
+				count -= 1
+			if stopSwitch:
+				break
+		if not count: return '網頁錯誤'
+		if result: break
 	if not result: return '無搜尋結果'
 	linkSet = set()
 	chatgpt_query = """\nWeb search results:"""
@@ -129,7 +141,7 @@ def replace_answer(gpt3_ans):
 	for w in forbidden_words:
 		if w in gpt3_ans:
 			gpt3_ans = gpt3_ans.split('，')
-			gpt3_ans = ('，').join(i for i in gpt3_ans if bw not in i)
+			gpt3_ans = ('，').join(i for i in gpt3_ans if w not in i)
 	gpt3_ans = '親愛的顧客您好，'+'，'.join(gpt3_ans.split('，')[1:])
 	return gpt3_ans
 
