@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
 openai.api_key = eval(os.getenv('OPENAI_API_KEY'))[1]
-google_serch_key = os.getenv('GOOGLE_SERCH_KEY')
+GOOGLE_SEARCH_KEY = os.getenv('GOOGLE_SEARCH_KEY')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
 CX = eval(os.getenv('CX'))
@@ -78,8 +78,8 @@ def likr_search(keyword_list, web_id='nineyi000360'):
 	keyword_combination = []
 	for i in range(len(keyword_list), 0, -1):
 		keyword_combination += list(itertools.combinations(keyword_list, i))
-	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q=',
-			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q=']
+	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={GOOGLE_SEARCH_KEY}&q=',
+			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={GOOGLE_SEARCH_KEY}&q=']
 
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
@@ -96,9 +96,9 @@ def likr_search(keyword_list, web_id='nineyi000360'):
 					result_kw = kw
 				count -= 1
 			if stopSwitch: break
-		if not count: return '網頁錯誤', '+'.join(keyword_combination)
+		if not count: return '網頁錯誤', '+'.join(keyword_list)
 		if result: break
-	if not result: return '無搜尋結果', '+'.join(keyword_combination)
+	if not result: return '無搜尋結果', '+'.join(keyword_list)
 	return result, result_kw
 
 def get_gpt_query(result, query):
@@ -161,19 +161,29 @@ def replace_answer(gpt3_ans):
 	gpt3_ans = '親愛的顧客您好，'+'，'.join(gpt3_ans.split('，')[1:])
 	return gpt3_ans
 
-def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
-	say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
-	query = f"""SELECT id, counts, question, answer, q_a_history FROM web_push.slack_chatgpt WHERE ts='{thread_ts}';"""
-	data = DBhelper('jupiter_new').ExecuteSelect(query)
-	QA_report_df = pd.DataFrame(data, columns=['id', 'counts', 'question', 'answer', 'q_a_history'])
+def check_web_id(message):
+	for web_id in CX.keys():
+		if web_id in message:
+			return web_id
+	return 'nineyi000360'
 
+def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
+	web_id = check_web_id(message)
+	query = f"""SELECT id, web_id, counts, question, answer, q_a_history FROM web_push.slack_chatgpt WHERE ts='{thread_ts}';"""
+	data = DBhelper('jupiter_new').ExecuteSelect(query)
+	QA_report_df = pd.DataFrame(data, columns=['id', 'web_id', 'counts', 'question', 'answer', 'q_a_history'])
+	if len(QA_report_df) > 0:
+		web_id = QA_report_df['web_id'].values[0]
+		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
+	else:
+		say(text=f"請稍等{web_id}智慧服務為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	# Step 1: get keyword from chatGPT
 	keyword_list = question_pos_parser(message, 3)
 	print('關鍵字:\t', keyword_list)
 
 	# Step 2: get gpt_query with search results from google search engine
-	result, keyword = likr_search(keyword_list)
-	gpt_query = get_gpt_query(result, message)
+	result, keyword = likr_search(keyword_list, web_id)
+	gpt_query = get_gpt_query(result, message) if type(result) != str else result
 	history = None
 	if len(QA_report_df) > 0:
 		history = json.loads(QA_report_df['q_a_history'].iloc[0])
@@ -201,8 +211,8 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		QA_report_df[['question', 'answer', 'q_a_history']] = [gpt_query, gpt3_answer_slack, json.dumps(history)]
 	else:
 		gpt3_history = json.dumps([{"role": "user", "content": f"{gpt_query}"}, {"role": "assistant", "content": f"{gpt3_answer}"}])
-		QA_report_df = pd.DataFrame([[user_id, ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
-									columns=['user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+		QA_report_df = pd.DataFrame([[web_id, user_id, thread_ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
+									columns=['web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
 	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt', chunk_size=100000, is_ssh=False)
 	QA_report_df = QA_report_df.drop(['q_a_history'], axis=1)
 	QA_report_df['keyword'] = keyword
