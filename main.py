@@ -31,7 +31,7 @@ VVIP = eval(os.getenv('VVIP'))
 CHANNEL = eval(os.getenv('CHANNEL'))
 
 app = App(token=SLACK_BOT_TOKEN, name="Bot")
-cc = OpenCC('s2twp')
+
 date = datetime.today().strftime('%Y/%m/%d')
 ts_set = set()
 actions_ts = set()
@@ -44,22 +44,29 @@ def ask_gpt(message, model="gpt-3.5-turbo"):
 	return completion['choices'][0]['message']['content']
 
 def question_pos_parser(question):
-	stopSwitch, retry = False, 1
+	stopSwitch, retry, keyword = False, 3, ''
 	mappingDict = {'noun': '名詞', 'verb': '動詞'}
 	forbidden_words = {'client_msg_id'}
 	while not stopSwitch and retry:
 		print('ask')
-		question_keywords = ask_gpt(f'Choose the {min(len(question) + 2 // 3, 3)} most important words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
+		question_keywords = ask_gpt(f'Choose the {min(len(question) + 2 // 3, 3)} most important words which under 3 chinese words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
 		print('ask_finished')
 		keyword_pos = {}
 		for k in question_keywords.split(','):
 			k = k.split('/')
-			if len(k) != 2 or k[0] in forbidden_words:
+			if len(k) != 2 or k[0] in forbidden_words or len(k[0]) > 4:
 				continue
 			keyword_pos[k[0]] = mappingDict.get(k[1], k[1])
-		stopSwitch = len(keyword_pos) > 0
+			keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
+		stopSwitch = len(keyword) > 0
 		retry -= 1
-	return keyword_pos
+	if not keyword:
+		keyword = ask_gpt(f'幫我從"{question}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')
+	return keyword
+
+def translation_stw(text):
+	cc = OpenCC('s2twp')
+	return cc.convert(text)
 
 def get_gpt_query(keyword, query, web_id='nineyi000360'):
 	'''
@@ -152,10 +159,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	QA_report_df = pd.DataFrame(data, columns=['id', 'counts', 'question', 'answer', 'q_a_history'])
 
 	# Step 1: get keyword from chatGPT
-	keyword_pos = question_pos_parser(message)
-	keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
-	if not keyword:
-		keyword = ask_gpt(f'幫我從"{message}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"', '').replace("。", '')
+	keyword = question_pos_parser(message)
 	print('關鍵字:\t', keyword)
 
 	# Step 2: get gpt_query with search results from google search engine
@@ -208,16 +212,17 @@ def show_bert_qa(message, body, say):
 	text = message['text']
 	ts = message['ts']
 	thread_ts = body.get('event').get('thread_ts')
-	if ts in ts_set or float(now_ts) > float(ts):
+	# no reply
+	if ts in ts_set or float(now_ts) > float(ts) or \
+		dm_channel not in CHANNEL or \
+		'bot_profile' in body['event']:
 		return
+		# user_id not in VIP or \
 	ts_set.add(ts)
-	if dm_channel not in CHANNEL:
-		return
-	if user_id not in VIP:
-		return
 	if DEBUG and user_id not in VVIP:
 		say(text=f"對不起！目前正在維修中,請稍後再嘗試。", channel=dm_channel, thread_ts=ts)
 		return
+
 	if not thread_ts:
 		if body.get('event').get('blocks')[0].get('text'):
 			text = body.get('event').get('blocks')[0].get('text').get('text')
