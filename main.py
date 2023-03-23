@@ -141,9 +141,9 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 def replace_answer(gpt3_ans):
 	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.-\/]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	gpt3_ans = cc.convert(gpt3_ans)
+	gpt3_ans = translation_stw(gpt3_ans)
 	for url in set(re.findall(r'https?:\/\/[\w\.-\/]+', gpt3_ans)):
-		gpt3_ans = gpt3_ans.replace(url, '<' + url + '|查看更多>')
+		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	forbidden_words = ['抱歉', '錯誤', '對不起']
 	for w in forbidden_words:
 		if w in gpt3_ans:
@@ -170,7 +170,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		ts_set.add(ts)
 		return
 	elif gpt_query == '無搜尋結果':
-		gpt3_answer_slack =f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 		say(text=gpt3_answer_slack, channel=dm_channel, thread_ts=ts)
 	else:
 		# Step 3: response from chatGPT
