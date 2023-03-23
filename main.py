@@ -6,6 +6,8 @@ sys.path.append("..")
 load_dotenv()
 from datetime import datetime
 import pandas as pd
+from collections import Counter
+import jieba
 from opencc import OpenCC
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -21,7 +23,7 @@ logging.basicConfig(level=logging.INFO,
                     filemode='w',
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
-openai.api_key = os.getenv('OPENAI_API_KEY')
+openai.api_key = eval(os.getenv('OPENAI_API_KEY'))[1]
 google_serch_key = os.getenv('GOOGLE_SERCH_KEY')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
@@ -43,21 +45,25 @@ def ask_gpt(message, model="gpt-3.5-turbo"):
 	completion = openai.ChatCompletion.create(model=model, messages=message)
 	return completion['choices'][0]['message']['content']
 
-def question_pos_parser(question):
-	stopSwitch, retry, keyword = False, 3, ''
-	mappingDict = {'noun': '名詞', 'verb': '動詞'}
-	forbidden_words = {'client_msg_id'}
+def question_pos_parser(question, retry = 3, mode='N'):
+	'''
+	:param mode: N => just filter noun
+	--------
+	It will early return when there's only one word after segmentation.
+	It will return one word chosen by chatGPT when there are no words after filtering by chatGPT.
+	'''
+	question = translation_stw(question)
+	seg_list = list(jieba.cut(question))
+	if len(seg_list) == 1:
+		return seg_list
+	stopSwitch, retry, keyword = False, retry, ''
+	forbidden_words = {'client_msg_id', '什麼'}
 	while not stopSwitch and retry:
-		print('ask')
-		question_keywords = ask_gpt(f'Choose the {min(len(question) + 2 // 3, 3)} most important words which under 3 chinese words from "{question}" and give me what part of speech it is. Using [word/pos] with sep by ", "').replace('\n','').replace('"','').replace("。",'')
-		print('ask_finished')
-		keyword_pos = {}
-		for k in question_keywords.split(','):
-			k = k.split('/')
-			if len(k) != 2 or k[0] in forbidden_words or len(k[0]) > 4:
-				continue
-			keyword_pos[k[0]] = mappingDict.get(k[1], k[1])
-			keyword = '+'.join(k.strip() for k, v in keyword_pos.items() if v == '名詞')
+		if mode == 'N':
+			print('ask')
+			keyword = ask_gpt(f'To "{question}", choose the {min((len(seg_list) + 2) // 3, 3)} most important NOUN from "{seg_list}" with sep by ", "').replace('\n','').replace('"','').replace("。",'')
+			print('ask_finished')
+			keyword = [i.strip() for i in keyword.split(',') if not any(re.search(w,i) for w in forbidden_words)]
 		stopSwitch = len(keyword) > 0
 		retry -= 1
 	if not keyword:
@@ -68,11 +74,39 @@ def translation_stw(text):
 	cc = OpenCC('s2twp')
 	return cc.convert(text)
 
-def get_gpt_query(keyword, query, web_id='nineyi000360'):
+def likr_search(keyword_list, web_id='nineyi000360'):
+	keyword_combination = []
+	for i in range(len(keyword_list), 0, -1):
+		keyword_combination += list(itertools.combinations(keyword_list, i))
+	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q=',
+			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q=']
+
+	for kw in keyword_combination:
+		kw = '+'.join(kw)
+		print('搜尋關鍵字:\t', kw)
+		for html in htmls:
+			html += kw
+			stopSwitch, count, result = False, 10, None
+			while not stopSwitch and count:
+				print(f'第{11 - count}次搜尋')
+				response = requests.get(html)
+				if response:
+					stopSwitch = response.status_code == 200
+					result = response.json().get('items')
+					result_kw = kw
+				count -= 1
+			if stopSwitch: break
+		if not count: return '網頁錯誤', '+'.join(keyword_combination)
+		if result: break
+	if not result: return '無搜尋結果', '+'.join(keyword_combination)
+	return result, result_kw
+
+def get_gpt_query(result, query):
 	'''
-	:param keyword: for google search
+	:param query: result from likr_search
 	:param query: question for chatgpt
-	######## chatgpt_query ########
+	-------
+	chatgpt_query
 		Web search results:
 
 		[1] "{g[0]['snippet']}"
@@ -91,31 +125,6 @@ def get_gpt_query(keyword, query, web_id='nineyi000360'):
 		Query: {question}
 		Reply in 繁體中文
 	'''
-	keyword = keyword.split('+')
-	keyword_list = []
-	for i in range(len(keyword), 0, -1):
-		keyword_list += list(itertools.combinations(keyword, i))
-	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={google_serch_key}&q=',
-			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={google_serch_key}&q=']
-
-	for kw in keyword_list:
-		kw = '+'.join(kw)
-		print('搜尋關鍵字:\t', kw)
-		for html in htmls:
-			html += kw
-			stopSwitch, count, result = False, 10, None
-			while not stopSwitch and count:
-				print(f'第{11-count}次搜尋')
-				response = requests.get(html)
-				if response:
-					stopSwitch = response.status_code == 200
-					result = response.json().get('items')
-				count -= 1
-			if stopSwitch:
-				break
-		if not count: return '網頁錯誤'
-		if result: break
-	if not result: return '無搜尋結果'
 	linkSet = set()
 	chatgpt_query = """\nWeb search results:"""
 	for v in result:
@@ -159,41 +168,41 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	QA_report_df = pd.DataFrame(data, columns=['id', 'counts', 'question', 'answer', 'q_a_history'])
 
 	# Step 1: get keyword from chatGPT
-	keyword = question_pos_parser(message)
-	print('關鍵字:\t', keyword)
+	keyword_list = question_pos_parser(message, 3)
+	print('關鍵字:\t', keyword_list)
 
 	# Step 2: get gpt_query with search results from google search engine
-	gpt_query = get_gpt_query(keyword, message)
+	result, keyword = likr_search(keyword_list)
+	gpt_query = get_gpt_query(result, message)
+	history = None
+	if len(QA_report_df) > 0:
+		history = json.loads(QA_report_df['q_a_history'].iloc[0])
+		history.append({"role": "user", "content": f"{gpt_query}"})
+		while len(str(history)) > 3000 and len(history) > 3:
+			history = history[2:]
+		print('歷史紀錄:\t', history)
 	print('chatGPT輸入:\t', gpt_query)
+
 	if gpt_query == '網頁錯誤':
 		say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
 		ts_set.add(ts)
 		return
 	elif gpt_query == '無搜尋結果':
-		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
-		say(text=gpt3_answer_slack, channel=dm_channel, thread_ts=ts)
+		gpt3_answer = gpt3_answer_slack =f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 	else:
 		# Step 3: response from chatGPT
-		if len(QA_report_df) > 0:
-			history = json.loads(QA_report_df['q_a_history'].iloc[0])
-			history.append({"role": "user", "content": f"{gpt_query}"})
-			while len(str(history)) > 3000 and len(history) > 3:
-				history = history[2:]
-			print('歷史紀錄:\t', history)
-			gpt3_answer = ask_gpt(history)
-		else:
-			gpt3_answer = ask_gpt(gpt_query)
+		gpt3_answer = ask_gpt(history if history else gpt_query)
 		gpt3_answer_slack = replace_answer(gpt3_answer)
 		print('cahtGPT輸出:\t', gpt3_answer_slack)
 
-	if len(QA_report_df) > 0:
+	if history:
 		history.append({"role": "assistant", "content": f"{gpt3_answer}"})
 		QA_report_df['counts'] += 1
 		QA_report_df[['question', 'answer', 'q_a_history']] = [gpt_query, gpt3_answer_slack, json.dumps(history)]
 	else:
 		gpt3_history = json.dumps([{"role": "user", "content": f"{gpt_query}"}, {"role": "assistant", "content": f"{gpt3_answer}"}])
 		QA_report_df = pd.DataFrame([[user_id, ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
-								  columns=['user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+									columns=['user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
 	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt', chunk_size=100000, is_ssh=False)
 	QA_report_df = QA_report_df.drop(['q_a_history'], axis=1)
 	QA_report_df['keyword'] = keyword
