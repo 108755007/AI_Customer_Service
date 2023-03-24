@@ -2,6 +2,7 @@ import os, sys, logging
 import re, json, requests
 import itertools
 from dotenv import load_dotenv
+from functools import wraps
 sys.path.append("..")
 load_dotenv()
 from datetime import datetime
@@ -23,7 +24,7 @@ logging.basicConfig(level=logging.INFO,
                     filemode='w',
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
-openai.api_key = eval(os.getenv('OPENAI_API_KEY'))[1]
+openai.api_key = eval(os.getenv('OPENAI_API_KEY'))[0]
 GOOGLE_SEARCH_KEY = os.getenv('GOOGLE_SEARCH_KEY')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
@@ -54,6 +55,9 @@ def question_pos_parser(question, retry = 3, mode='N'):
 	'''
 	question = translation_stw(question)
 	seg_list = list(jieba.cut(question))
+	for k in CX.keys():
+		if k in seg_list:
+			seg_list.remove(k)
 	if len(seg_list) == 1:
 		return seg_list
 	stopSwitch, retry, keyword = False, retry, ''
@@ -126,7 +130,7 @@ def get_gpt_query(result, query):
 		Reply in 繁體中文
 	'''
 	linkSet = set()
-	chatgpt_query = """\nWeb search results:"""
+	chatgpt_query = """\nResults:"""
 	for v in result:
 		if not v.get('link') or len(linkSet) == 3:
 			continue
@@ -144,21 +148,28 @@ def get_gpt_query(result, query):
 		if v.get('pagemap').get('metatags'):
 			chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
 		chatgpt_query += f"""\nURL: "{url}" """
-	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided web search results, write a comprehensive reply to the given query. Make sure to cite results using [[number](URL)] notation after the reference. If the provided search results refer to multiple subjects with the same name, write separate answers for each subject.\nQuery: {query}\nReply in 繁體中文\n"""
+	for i in CX.keys():
+		query = query.replace(i, '')
+	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Make sure to cite results using [[number](URL)] notation after the reference. If the provided results refer to multiple subjects with the same name, write separate answers for each subject. Reply in 繁體中文 and Following the rule below\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	return chatgpt_query
 
 def replace_answer(gpt3_ans):
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.-\/]+)\|.*>)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.\-\/]+)\|.*>)', gpt3_ans):
+		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
+	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\da-z\.\-\/]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
-	for url in set(re.findall(r'https?:\/\/[\w\.-\/]+', gpt3_ans)):
+	gpt3_ans = gpt3_ans.replace('，\n', '，')
+	for url in set(re.findall(r'https?:\/\/[\w\.\-\/]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	forbidden_words = ['抱歉', '錯誤', '對不起']
+	replace_words = {'此致', '敬禮', '<b>', '</b>'}
 	for w in forbidden_words:
 		if w in gpt3_ans:
 			gpt3_ans = gpt3_ans.split('，')
 			gpt3_ans = ('，').join(i for i in gpt3_ans if w not in i)
-	gpt3_ans = '親愛的顧客您好，'+'，'.join(gpt3_ans.split('，')[1:])
+	for w in replace_words:
+		gpt3_ans = gpt3_ans.replace(w, '').strip('\n')
 	return gpt3_ans
 
 def check_web_id(message):
@@ -169,14 +180,14 @@ def check_web_id(message):
 
 def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	web_id = check_web_id(message)
-	query = f"""SELECT id, web_id, counts, question, answer, q_a_history FROM web_push.slack_chatgpt WHERE ts='{thread_ts}';"""
+	query = f"""SELECT id, web_id, counts, question, answer, q_a_history FROM web_push.AI_service WHERE ts='{thread_ts}';"""
 	data = DBhelper('jupiter_new').ExecuteSelect(query)
 	QA_report_df = pd.DataFrame(data, columns=['id', 'web_id', 'counts', 'question', 'answer', 'q_a_history'])
 	if len(QA_report_df) > 0:
 		web_id = QA_report_df['web_id'].values[0]
 		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	else:
-		say(text=f"請稍等{web_id}智慧服務為您提供回覆...", channel=dm_channel, thread_ts=ts)
+		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	# Step 1: get keyword from chatGPT
 	keyword_list = question_pos_parser(message, 3)
 	print('關鍵字:\t', keyword_list)
@@ -211,18 +222,14 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		QA_report_df[['question', 'answer', 'q_a_history']] = [gpt_query, gpt3_answer_slack, json.dumps(history)]
 	else:
 		gpt3_history = json.dumps([{"role": "user", "content": f"{gpt_query}"}, {"role": "assistant", "content": f"{gpt3_answer}"}])
-		QA_report_df = pd.DataFrame([[web_id, user_id, thread_ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
+		QA_report_df = pd.DataFrame([[web_id, user_id, ts if not thread_ts else thread_ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
 									columns=['web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
-	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt', chunk_size=100000, is_ssh=False)
+	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service', chunk_size=100000, is_ssh=False)
 	QA_report_df = QA_report_df.drop(['q_a_history'], axis=1)
 	QA_report_df['keyword'] = keyword
-	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt_cache', chunk_size=100000, is_ssh=False)
-	say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
+	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service_cache', chunk_size=100000, is_ssh=False)
 
-def update_history(user_id, ts, counts, question, keyword, answer):
-	QA_report_df = pd.DataFrame([[user_id, ts, counts, question, keyword, answer, datetime.now()]],columns=['user_id', 'ts', 'counts', 'question', 'keyword', 'answer','add_time'])
-	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_chatgpt_history', chunk_size=100000,is_ssh=False)
-	return
+	say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
 
 @app.message(re.compile(".*"))  # type: ignore
 def show_bert_qa(message, body, say):
@@ -289,6 +296,7 @@ def show_bert_qa(message, body, say):
 				}
 			],channel=dm_channel,thread_ts=ts)
 	gpt_QA(text, dm_channel, user_id, ts, thread_ts, say)
+	# time_counter_gptqa(gpt_QA, text, dm_channel, user_id, ts, thread_ts, say)
 	return
 
 @app.action("bo1")
@@ -314,7 +322,7 @@ def handle_some_action(ack, body, say):
 	gpt_query = get_gpt_query(text)
 	completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{gpt_query}"}])
 	QA_report_df = pd.DataFrame([[body['user']['id'],ts,text,gpt_query,completion['choices'][0]['message']['content'],1]],columns=['user_id', 'ts','question','question1', 'answer1','counts'])
-	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='slack_webchatgpt', chunk_size=100000,is_ssh=False)
+	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service', chunk_size=100000,is_ssh=False)
 	say(text=f"{completion['choices'][0]['message']['content']}", channel=body['container']['channel_id'],thread_ts=body['container']['thread_ts'])
 	return
 
