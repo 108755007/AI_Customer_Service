@@ -40,13 +40,28 @@ ts_set = set()
 actions_ts = set()
 now_ts = datetime.timestamp(datetime.now())
 
+def get_config():
+	'''
+	Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
+	'''
+	config_dict = {}
+	config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config;")
+	config_col = [i[0] for i in DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
+	for conf in config:
+		config_dict[conf[1]] = {}
+		for k, v in zip(config_col, conf):
+			config_dict[conf[1]][k] = v
+	return config_dict
+
+CONFIG = get_config()
+
 def ask_gpt(message, model="gpt-3.5-turbo"):
 	if type(message) == str:
 		message = [{'role': 'user', 'content': message}]
 	completion = openai.ChatCompletion.create(model=model, messages=message)
 	return completion['choices'][0]['message']['content']
 
-def question_pos_parser(question, retry = 3, mode='N'):
+def question_pos_parser(question, retry = 3, web_id='nineyi000360', mode='N'):
 	'''
 	:param mode: N => just filter noun
 	--------
@@ -55,9 +70,10 @@ def question_pos_parser(question, retry = 3, mode='N'):
 	'''
 	question = translation_stw(question)
 	seg_list = list(jieba.cut(question))
-	for k in CX.keys():
-		if k in seg_list:
-			seg_list.remove(k)
+	for i in [CONFIG[web_id]['web_id'], CONFIG[web_id]['web_name']]+eval(CONFIG[web_id]['other_name']):
+		for j in list(jieba.cut(i)):
+			if j in seg_list:
+				seg_list.remove(j)
 	if len(seg_list) == 1:
 		return seg_list
 	stopSwitch, retry, keyword = False, retry, ''
@@ -82,25 +98,28 @@ def likr_search(keyword_list, web_id='nineyi000360'):
 	keyword_combination = []
 	for i in range(len(keyword_list), 0, -1):
 		keyword_combination += list(itertools.combinations(keyword_list, i))
-	htmls = [f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={CX[web_id]}&key={GOOGLE_SEARCH_KEY}&q=',
-			 f'https://www.googleapis.com/customsearch/v1?cx={CX[web_id]}&key={GOOGLE_SEARCH_KEY}&q=']
+	htmls = []
+	for i in (CONFIG[web_id]['sub_domain_cx'], CONFIG[web_id]['domain_cx']):
+		if i != '_':
+			htmls.insert(len(htmls)//2, (f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={i}', 3))
+			htmls.append((f'https://www.googleapis.com/customsearch/v1?cx={i}', 1))
 
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
 		print('搜尋關鍵字:\t', kw)
-		for html in htmls:
-			html += kw
-			stopSwitch, count, result = False, 10, None
-			while not stopSwitch and count:
-				print(f'第{11 - count}次搜尋')
+		for html, retry in htmls:
+			html += f'&key={GOOGLE_SEARCH_KEY}&q={kw}'
+			stopSwitch, cnt, result = False, retry, None
+			while not stopSwitch and retry:
+				print(f'第{cnt - retry}次搜尋')
 				response = requests.get(html)
 				if response:
 					stopSwitch = response.status_code == 200
 					result = response.json().get('items')
 					result_kw = kw
-				count -= 1
+				retry -= 1
 			if stopSwitch: break
-		if not count: return '網頁錯誤', '+'.join(keyword_list)
+		if not retry: return '網頁錯誤', '+'.join(keyword_list)
 		if result: break
 	if not result: return '無搜尋結果', '+'.join(keyword_list)
 	return result, result_kw
@@ -111,7 +130,7 @@ def get_gpt_query(result, query):
 	:param query: question for chatgpt
 	-------
 	chatgpt_query
-		Web search results:
+		Results:
 
 		[1] "{g[0]['snippet']}"
 		URL: "{g[0]['link']}"
@@ -125,9 +144,13 @@ def get_gpt_query(result, query):
 
 		Current date: {date}
 
-		Instructions: Using the provided web search results, write a comprehensive reply to the given query. Make sure to cite results using [[number](URL)] notation after the reference. If the provided search results refer to multiple subjects with the same name, write separate answers for each subject.
-		Query: {question}
-		Reply in 繁體中文
+		Instructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:
+		Make sure to cite results using [[number](URL)] notation after the reference.
+		Write separate answers for each subject.
+		"親愛的顧客您好，" in the beginning.
+		"祝您愉快！" in the end.
+
+		Query: {query}
 	'''
 	linkSet = set()
 	chatgpt_query = """\nResults:"""
@@ -148,9 +171,9 @@ def get_gpt_query(result, query):
 		if v.get('pagemap').get('metatags'):
 			chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
 		chatgpt_query += f"""\nURL: "{url}" """
-	for i in CX.keys():
+	for i in CONFIG.keys():
 		query = query.replace(i, '')
-	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Make sure to cite results using [[number](URL)] notation after the reference. If the provided results refer to multiple subjects with the same name, write separate answers for each subject. Reply in 繁體中文 and Following the rule below\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nUsing the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nUse [[number](URL)] notation after the reference.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	return chatgpt_query
 
 def replace_answer(gpt3_ans):
@@ -173,9 +196,16 @@ def replace_answer(gpt3_ans):
 	return gpt3_ans
 
 def check_web_id(message):
-	for web_id in CX.keys():
-		if web_id in message:
+	for web_id in CONFIG.keys():
+		if CONFIG[web_id]['web_id'] in message:
 			return web_id
+	for web_id in CONFIG.keys():
+		if CONFIG[web_id]['web_name'] in message:
+			return web_id
+	for web_id in CONFIG.keys():
+		for name in eval(CONFIG[web_id]['other_name']):
+			if name in message:
+				return web_id
 	return 'nineyi000360'
 
 def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
@@ -189,7 +219,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	else:
 		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	# Step 1: get keyword from chatGPT
-	keyword_list = question_pos_parser(message, 3)
+	keyword_list = question_pos_parser(message, 3, web_id)
 	print('關鍵字:\t', keyword_list)
 
 	# Step 2: get gpt_query with search results from google search engine
