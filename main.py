@@ -24,11 +24,10 @@ logging.basicConfig(level=logging.INFO,
                     filemode='w',
                     format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
 
-openai.api_key = eval(os.getenv('OPENAI_API_KEY'))[0]
+OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
 GOOGLE_SEARCH_KEY = os.getenv('GOOGLE_SEARCH_KEY')
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
 SLACK_BOT_TOKEN = os.getenv('SLACK_BOT_TOKEN')
-CX = eval(os.getenv('CX'))
 VIP = eval(os.getenv('VIP'))
 VVIP = eval(os.getenv('VVIP'))
 CHANNEL = eval(os.getenv('CHANNEL'))
@@ -39,6 +38,12 @@ date = datetime.today().strftime('%Y/%m/%d')
 ts_set = set()
 actions_ts = set()
 now_ts = datetime.timestamp(datetime.now())
+
+def get_openai_key_id():
+	opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id,count FROM web_push.openai_token_number_of_users x ORDER BY count limit 1")
+	return opena_ai_key_id[0][0]
+
+
 
 def get_config():
 	'''
@@ -56,9 +61,14 @@ def get_config():
 CONFIG = get_config()
 
 def ask_gpt(message, model="gpt-3.5-turbo"):
+	token_id = get_openai_key_id()
+	print(token_id)
+	DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
+	openai.api_key = OPEN_AI_KEY_DICT[token_id]
 	if type(message) == str:
 		message = [{'role': 'user', 'content': message}]
 	completion = openai.ChatCompletion.create(model=model, messages=message)
+	DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
 	return completion['choices'][0]['message']['content']
 
 def question_pos_parser(question, retry = 3, web_id='nineyi000360', mode='N'):
