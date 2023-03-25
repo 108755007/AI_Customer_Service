@@ -179,13 +179,13 @@ def get_gpt_query(result, query):
 
 def replace_answer(gpt3_ans):
 	print("chatGPT原生回答\t", gpt3_ans)
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\%\?]+)\|.*>)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\%\?\#]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\%\?]+)\)?)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\%\?\#]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\%\?]+', gpt3_ans)):
+	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\%\?\#]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	forbidden_words = ['抱歉', '錯誤', '對不起']
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?'}
