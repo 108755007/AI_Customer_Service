@@ -68,7 +68,7 @@ def question_pos_parser(question, retry = 3, web_id='nineyi000360', mode='N'):
 	It will early return when there's only one word after segmentation.
 	It will return one word chosen by chatGPT when there are no words after filtering by chatGPT.
 	'''
-	question = translation_stw(question)
+	question = translation_stw(question).lower()
 	seg_list = list(jieba.cut(question))
 	for i in [CONFIG[web_id]['web_id'], CONFIG[web_id]['web_name']]+eval(CONFIG[web_id]['other_name']):
 		for j in list(jieba.cut(i)):
@@ -109,6 +109,7 @@ def likr_search(keyword_list, web_id='nineyi000360'):
 		print('搜尋關鍵字:\t', kw)
 		for html, retry in htmls:
 			html += f'&key={GOOGLE_SEARCH_KEY}&q={kw}'
+			print(html)
 			stopSwitch, cnt, result = False, retry, None
 			while not stopSwitch and retry:
 				print(f'第{cnt - retry}次搜尋')
@@ -145,7 +146,7 @@ def get_gpt_query(result, query):
 		Current date: {date}
 
 		Instructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:
-		Make sure to cite results using [[number](URL)] notation after the reference.
+		Always cite results using [[number](URL)] notation after the reference.
 		Write separate answers for each subject.
 		"親愛的顧客您好，" in the beginning.
 		"祝您愉快！" in the end.
@@ -158,7 +159,7 @@ def get_gpt_query(result, query):
 		if not v.get('link') or len(linkSet) == 3:
 			continue
 		url = v.get('link')
-		url = re.search(r'.+detail/[\w]+/', url).group(0) if re.search(r'.+detail/[\w]+/', url) else url
+		url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
 		print('搜尋結果:\t', url)
 		if url in linkSet:
 			continue
@@ -173,26 +174,29 @@ def get_gpt_query(result, query):
 		chatgpt_query += f"""\nURL: "{url}" """
 	for i in CONFIG.keys():
 		query = query.replace(i, '')
-	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nUsing the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nUse [[number](URL)] notation after the reference.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite results using [[number](URL)] notation after the reference.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	return chatgpt_query
 
 def replace_answer(gpt3_ans):
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\da-z\.\-\/]+)\|.*>)', gpt3_ans):
+	print("chatGPT原生回答\t", gpt3_ans)
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\%\?]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\da-z\.\-\/]+)\)?)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\%\?]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/]+', gpt3_ans)):
+	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\%\?]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	forbidden_words = ['抱歉', '錯誤', '對不起']
-	replace_words = {'此致', '敬禮', '<b>', '</b>'}
+	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?'}
 	for w in forbidden_words:
 		if w in gpt3_ans:
 			gpt3_ans = gpt3_ans.split('，')
 			gpt3_ans = ('，').join(i for i in gpt3_ans if w not in i)
 	for w in replace_words:
-		gpt3_ans = gpt3_ans.replace(w, '').strip('\n')
+		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
+	if '祝您愉快！' in gpt3_ans:
+		gpt3_ans = '祝您愉快！'.join(gpt3_ans.split("祝您愉快！")[:-1]) + '祝您愉快！'
 	return gpt3_ans
 
 def check_web_id(message):
@@ -363,7 +367,6 @@ def handle_message_events(body, logger):
 def main():
     handler = SocketModeHandler(app, SLACK_APP_TOKEN)
     handler.start()
-
 
 if __name__ == "__main__":
 	print('START!!')
