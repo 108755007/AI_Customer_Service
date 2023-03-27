@@ -185,7 +185,7 @@ def get_gpt_query(result, query, history, web_id):
 
 		Query: {query}
 	'''
-	message = [{"role": "system", "content": f"我們是{CONFIG[web_id]}(官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}]
+	message = [{"role": "system", "content": f"我們是{CONFIG[web_id]['web_name']}(官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}]
 	if history:
 		message += history
 	if type(result) != str:
@@ -265,7 +265,6 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	history = None
 	if len(QA_report_df) > 0:
 		history = json.loads(QA_report_df['q_a_history'].iloc[0])
-		history.append({"role": "user", "content": f"{gpt_query}"})
 		while len(str(history)) > 3000 and len(history) > 3:
 			history = history[2:]
 
@@ -277,7 +276,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 	else:
 		# Step 3: response from chatGPT
-		gpt_query = get_gpt_query(result, query, history, web_id)
+		gpt_query = get_gpt_query(result, message, history, web_id)
 		print('chatGPT輸入:\t', gpt_query)
 		gpt3_answer = ask_gpt(gpt_query)
 		gpt3_answer_slack = replace_answer(gpt3_answer)
