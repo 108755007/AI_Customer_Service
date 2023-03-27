@@ -2,12 +2,10 @@ import os, sys, logging
 import re, json, requests
 import itertools
 from dotenv import load_dotenv
-from functools import wraps
 sys.path.append("..")
 load_dotenv()
 from datetime import datetime
 import pandas as pd
-from collections import Counter
 import jieba
 from opencc import OpenCC
 from slack_bolt import App
@@ -15,7 +13,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
 from db import DBhelper
 
-DEBUG = False
+DEBUG = True
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -43,8 +41,6 @@ def get_openai_key_id():
 	opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id,count FROM web_push.openai_token_number_of_users x ORDER BY count limit 1")
 	return opena_ai_key_id[0][0]
 
-
-
 def get_config():
 	'''
 	Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
@@ -60,9 +56,24 @@ def get_config():
 
 CONFIG = get_config()
 
+def check_message_length(text, length):
+	for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%]+', text):
+		stopSwitch, retry, result = False, 3, None
+		while not stopSwitch and retry:
+			try:
+				response = requests.get(url)
+			except Exception as e:
+				break
+			if response:
+				stopSwitch = True
+			retry -= 1
+		print(response.status_code)
+		if stopSwitch and response.status_code == 200:
+			text = text.replace(url, '')
+	return len(text) <= length
+
 def ask_gpt(message, model="gpt-3.5-turbo"):
 	token_id = get_openai_key_id()
-	print(token_id)
 	DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
 	openai.api_key = OPEN_AI_KEY_DICT[token_id]
 	if type(message) == str:
@@ -71,7 +82,7 @@ def ask_gpt(message, model="gpt-3.5-turbo"):
 	DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
 	return completion['choices'][0]['message']['content']
 
-def question_pos_parser(question, retry = 3, web_id='nineyi000360', mode='N'):
+def question_pos_parser(question, retry=3, web_id='nineyi000360', mode='N'):
 	'''
 	:param mode: N => just filter noun
 	--------
@@ -97,28 +108,22 @@ def question_pos_parser(question, retry = 3, web_id='nineyi000360', mode='N'):
 		stopSwitch = len(keyword) > 0
 		retry -= 1
 	if not keyword:
-		keyword = ask_gpt(f'幫我從"{question}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')
+		keyword = [ask_gpt(f'幫我從"{question}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')]
 	return keyword
 
 def translation_stw(text):
 	cc = OpenCC('s2twp')
 	return cc.convert(text)
 
-def likr_search(keyword_list, web_id='nineyi000360'):
+def google_search(keyword_list, htmls):
 	keyword_combination = []
 	for i in range(len(keyword_list), 0, -1):
 		keyword_combination += list(itertools.combinations(keyword_list, i))
-	htmls = []
-	for i in (CONFIG[web_id]['sub_domain_cx'], CONFIG[web_id]['domain_cx']):
-		if i != '_':
-			htmls.insert(len(htmls)//2, (f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={i}', 3))
-			htmls.append((f'https://www.googleapis.com/customsearch/v1?cx={i}', 1))
-
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
 		print('搜尋關鍵字:\t', kw)
 		for html, retry in htmls:
-			html += f'&key={GOOGLE_SEARCH_KEY}&q={kw}'
+			html += kw
 			print(html)
 			stopSwitch, cnt, result = False, retry, None
 			while not stopSwitch and retry:
@@ -132,6 +137,21 @@ def likr_search(keyword_list, web_id='nineyi000360'):
 			if stopSwitch: break
 		if not retry: return '網頁錯誤', '+'.join(keyword_list)
 		if result: break
+	return result , result_kw
+
+def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
+	if len(keyword_list) > keyword_length:
+		keyword_list = keyword_list[:keyword_length]
+	htmls = []
+	for i in (CONFIG[web_id]['sub_domain_cx'], CONFIG[web_id]['domain_cx']):
+		if i != '_':
+			htmls.insert(len(htmls)//2, (f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={i}&key={GOOGLE_SEARCH_KEY}&q=', 3))
+			htmls.append((f'https://www.googleapis.com/customsearch/v1?cx={i}&key={GOOGLE_SEARCH_KEY}&q=', 1))
+	result, result_kw = google_search(keyword_list, htmls)
+	if str(CONFIG[web_id]['mode']) == '2' and not result:
+		htmls = [(f"https://www.googleapis.com/customsearch/v1?cx=46d551baeb2bc4ead&key={GOOGLE_SEARCH_KEY}&q={CONFIG[web_id]['web_name'].replace(' ', '+')}+", 10)]
+		result, result_kw = google_search(keyword_list, htmls)
+	print(CONFIG[web_id]['mode'])
 	if not result: return '無搜尋結果', '+'.join(keyword_list)
 	return result, result_kw
 
@@ -179,7 +199,7 @@ def get_gpt_query(result, query):
 			chatgpt_query += f"""\n\n[{len(linkSet)}] "{v.get('htmlTitle')}"""
 		if v.get('snippet'):
 			chatgpt_query += f""",snippet = "{v.get('snippet')}"""
-		if v.get('pagemap').get('metatags'):
+		if v.get('pagemap') and v.get('pagemap').get('metatags'):
 			chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
 		chatgpt_query += f"""\nURL: "{url}" """
 	for i in CONFIG.keys():
@@ -197,12 +217,7 @@ def replace_answer(gpt3_ans):
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
 	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\%\?\#]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
-	forbidden_words = ['抱歉', '錯誤', '對不起']
-	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?'}
-	for w in forbidden_words:
-		if w in gpt3_ans:
-			gpt3_ans = gpt3_ans.split('，')
-			gpt3_ans = ('，').join(i for i in gpt3_ans if w not in i)
+	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
 		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
 	if '祝您愉快！' in gpt3_ans:
@@ -283,12 +298,16 @@ def show_bert_qa(message, body, say):
 	ts = message['ts']
 	thread_ts = body.get('event').get('thread_ts')
 	# no reply
-	if ts in ts_set or float(now_ts) > float(ts) or \
+	if ts in ts_set or (thread_ts and float(now_ts) > float(thread_ts)) or \
 		dm_channel not in CHANNEL or \
 		'bot_profile' in body['event']:
 		return
 		# user_id not in VIP or \
 	ts_set.add(ts)
+	if not check_message_length(text, 50):
+		say(text=f"親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。", channel=dm_channel, thread_ts=ts)
+		return
+
 	if DEBUG and user_id not in VVIP:
 		say(text=f"對不起！目前正在維修中,請稍後再嘗試。", channel=dm_channel, thread_ts=ts)
 		return
