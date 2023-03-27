@@ -13,7 +13,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
 from db import DBhelper
 
-DEBUG = True
+DEBUG = False
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -57,7 +57,7 @@ def get_config():
 CONFIG = get_config()
 
 def check_message_length(text, length):
-	for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%]+', text):
+	for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', text):
 		stopSwitch, retry, result = False, 3, None
 		while not stopSwitch and retry:
 			try:
@@ -176,7 +176,7 @@ def get_gpt_query(result, query):
 		Current date: {date}
 
 		Instructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:
-		Always cite results using [[number](URL)] notation after the reference.
+		Always cite results using [[number](URL)] notation in the sentence's end when using the information from results.
 		Write separate answers for each subject.
 		"親愛的顧客您好，" in the beginning.
 		"祝您愉快！" in the end.
@@ -202,24 +202,24 @@ def get_gpt_query(result, query):
 		if v.get('pagemap') and v.get('pagemap').get('metatags'):
 			chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
 		chatgpt_query += f"""\nURL: "{url}" """
-	for i in CONFIG.keys():
-		query = query.replace(i, '')
-	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite results using [[number](URL)] notation after the reference.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+	chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite results using [[number](URL)] notation in the sentence's end when using the information from results.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	return chatgpt_query
 
 def replace_answer(gpt3_ans):
 	print("chatGPT原生回答\t", gpt3_ans)
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\%\?\#]+)\|.*>)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\%\?\#]+)\)?)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\%\?\#]+', gpt3_ans)):
+	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
 		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
+	if '親愛的' in gpt3_ans:
+		gpt3_ans = '親愛的' + '親愛的'.join(gpt3_ans.split("親愛的")[1:])
 	if '祝您愉快！' in gpt3_ans:
 		gpt3_ans = '祝您愉快！'.join(gpt3_ans.split("祝您愉快！")[:-1]) + '祝您愉快！'
 	return gpt3_ans
@@ -268,12 +268,16 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		ts_set.add(ts)
 		return
 	elif gpt_query == '無搜尋結果':
-		gpt3_answer = gpt3_answer_slack =f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+		no_result_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{CONFIG[web_id]['web_name']}"({web_id}) customer service,and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+		message = [{"role": "system", "content": f"我們是{CONFIG[web_id]}(官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}] + (history+[{"role": "user", "content": f"{no_result_query}"}] if history else [{'role': 'user', 'content': no_result_query}])
 	else:
 		# Step 3: response from chatGPT
-		gpt3_answer = ask_gpt(history if history else gpt_query)
-		gpt3_answer_slack = replace_answer(gpt3_answer)
-		print('cahtGPT輸出:\t', gpt3_answer_slack)
+		message = [{"role": "system", "content": f"我們是{CONFIG[web_id]}(官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}] + (history + [{"role": "user", "content": f"{gpt_query}"}] if history else [{'role': 'user', 'content': gpt_query}])
+	print('cahtGPT輸入:\t', message)
+	gpt3_answer = ask_gpt(message)
+	gpt3_answer_slack = replace_answer(gpt3_answer)
+	print('cahtGPT輸出:\t', gpt3_answer_slack)
 
 	if history:
 		history.append({"role": "assistant", "content": f"{gpt3_answer}"})
@@ -298,7 +302,7 @@ def show_bert_qa(message, body, say):
 	ts = message['ts']
 	thread_ts = body.get('event').get('thread_ts')
 	# no reply
-	if ts in ts_set or (thread_ts and float(now_ts) > float(thread_ts)) or \
+	if ts in ts_set or float(now_ts) > float(ts) or \
 		dm_channel not in CHANNEL or \
 		'bot_profile' in body['event']:
 		return
