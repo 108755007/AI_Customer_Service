@@ -1,9 +1,9 @@
 import os, sys, logging
-import re, json, requests
-import itertools
 from dotenv import load_dotenv
 sys.path.append("..")
 load_dotenv()
+import re, json, requests, itertools
+from func_timeout import func_timeout, exceptions as EX
 from datetime import datetime
 import pandas as pd
 import jieba
@@ -67,7 +67,6 @@ def check_message_length(text, length):
 			if response:
 				stopSwitch = True
 			retry -= 1
-		print(response.status_code)
 		if stopSwitch and response.status_code == 200:
 			text = text.replace(url, '')
 	return len(text) <= length
@@ -126,15 +125,15 @@ def google_search(keyword_list, html ,retry):
 		print('搜尋關鍵字:\t', kw)
 		search_html = html + kw
 		print(search_html)
-		stopSwitch, cnt, result = False, retry + 1, None
-		while not stopSwitch and retry:
-			print(f'第{cnt - retry}次搜尋')
+		stopSwitch, cnt, result = False, 1, None
+		while not stopSwitch and cnt != retry + 1:
+			print(f'第{cnt}次搜尋')
 			response = requests.get(search_html)
 			if response:
 				stopSwitch = response.status_code == 200
 				result = response.json().get('items')
 				result_kw = kw
-			retry -= 1
+			cnt += 1
 		if result: break
 	if not stopSwitch:
 		return '網頁錯誤', '+'.join(keyword_list)
@@ -259,31 +258,50 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	else:
 		say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
-	# Step 1: get keyword from chatGPT
-	keyword_list = question_pos_parser(message, 3, web_id)
+
+	# Step 1: get keyword from chatGPT (timeout = 3s)
+	try:
+		keyword_list = func_timeout(3, question_pos_parser,(message, 3, web_id))
+	except EX.FunctionTimedOut:
+		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
+		return
 	print('關鍵字:\t', keyword_list)
 
-	# Step 2: get gpt_query with search results from google search engine
-	result, keyword = likr_search(keyword_list, web_id)
+	# Step 2: get gpt_query with search results from google search engine (timeout = 5s)
+	try:
+		result, keyword = func_timeout(5, likr_search, (keyword_list, web_id))
+	except EX.FunctionTimedOut:
+		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
+		return
+	if result == '網頁錯誤':
+		say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
+		ts_set.add(ts)
+		return
+
 	history = None
 	if len(QA_report_df) > 0:
 		history = json.loads(QA_report_df['q_a_history'].iloc[0])
 		while len(str(history)) > 3000 and len(history) > 3:
 			history = history[2:]
 
-	if result == '網頁錯誤':
-		say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
-		ts_set.add(ts)
-		return
-	elif result == '無搜尋結果' and CONFIG[web_id]['mode'] == 2:
+	if result == '無搜尋結果' and CONFIG[web_id]['mode'] == 2:
 		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 	else:
-		# Step 3: response from chatGPT
+		# Step 3: response from chatGPT (timeout = 60s)
+		timeoutSwitch = False
 		gpt_query = get_gpt_query(result, message, history, web_id)
 		print('chatGPT輸入:\t', gpt_query)
-		gpt3_answer = ask_gpt(gpt_query)
+		try:
+			gpt3_answer = func_timeout(60, ask_gpt, (gpt_query,))
+		except EX.FunctionTimedOut:
+			say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
+			timeoutSwitch = True
+			gpt3_answer = ask_gpt(gpt_query)
 		gpt3_answer_slack = replace_answer(gpt3_answer)
 		print('cahtGPT輸出:\t', gpt3_answer_slack)
+	if not timeoutSwitch:
+		say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
+
 
 	if history:
 		history.append({"role": "assistant", "content": f"{gpt3_answer}"})
@@ -298,7 +316,6 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	QA_report_df['keyword'] = keyword
 	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service_cache', chunk_size=100000, is_ssh=False)
 
-	say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
 
 @app.message(re.compile(".*"))  # type: ignore
 def show_bert_qa(message, body, say):
@@ -314,89 +331,17 @@ def show_bert_qa(message, body, say):
 		return
 		# user_id not in VIP or \
 	ts_set.add(ts)
+	if DEBUG and user_id not in VVIP:
+		say(text=f"對不起！目前AI客服正在調整中,請稍後再嘗試。", channel=dm_channel, thread_ts=ts)
+		print(f'{"@"*20}有人要用！！{"@"*20}')
+		return
+
 	if not check_message_length(text, 50):
 		say(text=f"親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。", channel=dm_channel, thread_ts=ts)
 		return
 
-	if DEBUG and user_id not in VVIP:
-		say(text=f"對不起！目前正在維修中,請稍後再嘗試。", channel=dm_channel, thread_ts=ts)
-		return
-
-	if not thread_ts:
-		if body.get('event').get('blocks')[0].get('text'):
-			text = body.get('event').get('blocks')[0].get('text').get('text')
-
-		#similer_QA = bert_similer(text, Q, A,model_s)
-
-		#act = similer_QA[0][1]
-
-		#QA_report_df = pd.DataFrame([[user_id,text,act,ts]],columns=['user_id', 'question', 'answer', 'timetamp'])
-		#MySqlHelper.ExecuteUpdatebyChunk(QA_report_df, db='api02', table='slack_BertQA_history', chunk_size=100000,is_ssh=False)
-		if False:
-			say(text=act,blocks=[
-				{
-					"type": "section",
-					"text": {
-						"type": "plain_text",
-						"text": f"{act}",
-						"emoji": True
-					}
-				},
-				{
-					"type": "actions",
-					"elements": [
-						{
-							"type": "button",
-							"text": {
-								"type": "plain_text",
-								"text": "滿意",
-								"emoji": True
-							},
-							"value": f"{text}",
-							"action_id": "bo1"
-						},
-						{
-							"type": "button",
-							"text": {
-								"type": "plain_text",
-								"text": "不滿意",
-								"emoji": True
-							},
-							"value": f"{text}",
-							"action_id": "bo2"
-						}
-					]
-				}
-			],channel=dm_channel,thread_ts=ts)
 	gpt_QA(text, dm_channel, user_id, ts, thread_ts, say)
 	# time_counter_gptqa(gpt_QA, text, dm_channel, user_id, ts, thread_ts, say)
-	return
-
-@app.action("bo1")
-def handle_some_action(ack,body, say):
-	ack()
-	bts = body['message']['thread_ts']
-	if bts in actions_ts or float(now_ts) > float(bts):
-		return
-	actions_ts.add(bts)
-	say(text=f"不客氣",channel=body['container']['channel_id'], thread_ts=body['container']['thread_ts'])
-	return
-
-@app.action("bo2")
-def handle_some_action(ack, body, say):
-	ack()
-	bts = body['message']['thread_ts']
-	if bts in actions_ts or float(now_ts) > float(bts):
-		return
-	actions_ts.add(bts)
-	ts = body['container']['thread_ts']
-	say(text=f"請稍等為您提供其他答案...", channel=body['container']['channel_id'],thread_ts=body['container']['thread_ts'])
-	text = body['actions'][0]['value']
-	gpt_query = get_gpt_query(text)
-	completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": f"{gpt_query}"}])
-	QA_report_df = pd.DataFrame([[body['user']['id'],ts,text,gpt_query,completion['choices'][0]['message']['content'],1]],columns=['user_id', 'ts','question','question1', 'answer1','counts'])
-	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service', chunk_size=100000,is_ssh=False)
-	say(text=f"{completion['choices'][0]['message']['content']}", channel=body['container']['channel_id'],thread_ts=body['container']['thread_ts'])
 	return
 
 @app.event("message")
