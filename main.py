@@ -46,7 +46,7 @@ def get_config():
 	Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
 	'''
 	config_dict = {}
-	config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config;")
+	config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config where mode != 0;")
 	config_col = [i[0] for i in DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
 	for conf in config:
 		config_dict[conf[1]] = {}
@@ -99,7 +99,7 @@ def question_pos_parser(question, retry=3, web_id='nineyi000360', mode='N'):
 	if len(seg_list) == 1:
 		return seg_list
 	stopSwitch, retry, keyword = False, retry, ''
-	forbidden_words = {'client_msg_id', '什麼'}
+	forbidden_words = {'client_msg_id', '什麼', '有', '我', '你', '妳', '你們', '妳們', '沒有', '怎麼', '怎'}
 	while not stopSwitch and retry:
 		if mode == 'N':
 			print('ask')
@@ -120,28 +120,30 @@ def translation_stw(text):
 def google_search(keyword_list, html ,retry):
 	keyword_combination = []
 	for i in range(len(keyword_list), 0, -1):
-		keyword_combination += list(itertools.combinations(keyword_list, i))
+		keyword_combination += list(itertools.combinations(sorted(keyword_list, key=len, reverse=True), i))
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
 		print('搜尋關鍵字:\t', kw)
-		html += kw
-		print(html)
-		stopSwitch, cnt, result = False, retry, None
+		search_html = html + kw
+		print(search_html)
+		stopSwitch, cnt, result = False, retry + 1, None
 		while not stopSwitch and retry:
-			print(f'第{cnt - retry + 1}次搜尋')
-			response = requests.get(html)
+			print(f'第{cnt - retry}次搜尋')
+			response = requests.get(search_html)
 			if response:
 				stopSwitch = response.status_code == 200
 				result = response.json().get('items')
 				result_kw = kw
 			retry -= 1
-		if not retry: return '網頁錯誤', '+'.join(keyword_list)
 		if result: break
+	if not stopSwitch:
+		return '網頁錯誤', '+'.join(keyword_list)
 	return result , result_kw
 
 def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
 	if len(keyword_list) > keyword_length:
 		keyword_list = keyword_list[:keyword_length]
+	result = None
 	##todo 推薦引擎
 	if CONFIG[web_id]['sub_domain_cx']!= '_':
 		html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={CONFIG[web_id]['sub_domain_cx']}&key={GOOGLE_SEARCH_KEY}&q="
@@ -185,7 +187,7 @@ def get_gpt_query(result, query, history, web_id):
 
 		Query: {query}
 	'''
-	message = [{"role": "system", "content": f"我們是{CONFIG[web_id]['web_name']}(官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}]
+	message = [{"role": "system", "content": f"我們是{CONFIG[web_id]['web_name']}(代號：{CONFIG[web_id]['web_id']},官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}]
 	if history:
 		message += history
 	if type(result) != str:
@@ -216,13 +218,14 @@ def get_gpt_query(result, query, history, web_id):
 
 def replace_answer(gpt3_ans):
 	print("chatGPT原生回答\t", gpt3_ans)
+	print(re.findall('https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+',gpt3_ans))
 	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\)?)', gpt3_ans):
+	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', gpt3_ans)):
+	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+', gpt3_ans)):
 		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
@@ -285,10 +288,10 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	if history:
 		history.append({"role": "assistant", "content": f"{gpt3_answer}"})
 		QA_report_df['counts'] += 1
-		QA_report_df[['question', 'answer', 'q_a_history']] = [gpt_query, gpt3_answer_slack, json.dumps(history)]
+		QA_report_df[['question', 'answer', 'q_a_history']] = [message, gpt3_answer_slack, json.dumps(history)]
 	else:
 		gpt3_history = json.dumps([{"role": "user", "content": f"{gpt_query}"}, {"role": "assistant", "content": f"{gpt3_answer}"}])
-		QA_report_df = pd.DataFrame([[web_id, user_id, ts if not thread_ts else thread_ts, 1, gpt_query, gpt3_answer_slack, gpt3_history, datetime.now()]],
+		QA_report_df = pd.DataFrame([[web_id, user_id, ts if not thread_ts else thread_ts, 1, message, gpt3_answer_slack, gpt3_history, datetime.now()]],
 									columns=['web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
 	DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service', chunk_size=100000, is_ssh=False)
 	QA_report_df = QA_report_df.drop(['q_a_history'], axis=1)
