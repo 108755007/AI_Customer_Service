@@ -108,7 +108,7 @@ def question_pos_parser(question, retry=3, web_id='nineyi000360', mode='N'):
 		stopSwitch = len(keyword) > 0
 		retry -= 1
 	if not keyword:
-		keyword = [ask_gpt(f'幫我從"{question}"選出一個重要詞彙,只要回答詞彙就好').replace('\n', '').replace('"','').replace("。", '')]
+		keyword = [ask_gpt(f'Choose one important word  from "{question}". Just reply the word in 繁體中文.').replace('\n', '').replace('"','').replace("。", '')]
 	print(keyword)
 	return keyword
 
