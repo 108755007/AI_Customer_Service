@@ -38,7 +38,7 @@ actions_ts = set()
 now_ts = datetime.timestamp(datetime.now())
 
 def get_openai_key_id():
-	opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id,count FROM web_push.openai_token_number_of_users x ORDER BY count limit 1")
+	opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;")
 	return opena_ai_key_id[0][0]
 
 def get_config():
