@@ -1,9 +1,10 @@
-import os, sys, logging
+import os, sys, time, logging, traceback
+from functools import wraps
 from dotenv import load_dotenv
 sys.path.append("..")
 load_dotenv()
 import re, json, requests, itertools
-from func_timeout import func_timeout, exceptions as EX
+from func_timeout import func_timeout
 from datetime import datetime
 import pandas as pd
 import jieba
@@ -15,12 +16,18 @@ from db import DBhelper
 
 DEBUG = False
 
+date = datetime.today().strftime('%Y/%m/%d')
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+log_file_path = f'./log/{date.replace("/", "-")}-1.log'
+while os.path.exists(log_file_path):
+	log_file_path = '-'.join(log_file_path.split('-')[:-1]+[str(int(log_file_path.split('-')[-1][:-4])+1)+'.log'])
+with open(log_file_path, 'w+') as f:
+	pass
 logging.basicConfig(level=logging.INFO,
-                    filename='./log.txt',
+                    filename=log_file_path,
                     filemode='w',
-                    format='%(asctime)s - %(filename)s[line:%(lineno)d] - %(levelname)s: %(message)s')
+                    format='%(asctime)s - %(filename)s[line:%(lineno)d] -\t %(levelname)s: %(message)s')
 
 OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
 GOOGLE_SEARCH_KEY = os.getenv('GOOGLE_SEARCH_KEY')
@@ -32,7 +39,6 @@ CHANNEL = eval(os.getenv('CHANNEL'))
 
 app = App(token=SLACK_BOT_TOKEN, name="Bot")
 
-date = datetime.today().strftime('%Y/%m/%d')
 ts_set = set()
 actions_ts = set()
 now_ts = datetime.timestamp(datetime.now())
@@ -40,6 +46,22 @@ now_ts = datetime.timestamp(datetime.now())
 def get_openai_key_id():
 	opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;")
 	return opena_ai_key_id[0][0]
+
+def print_log(info):
+	logger.setLevel(logging.DEBUG)
+	print(info)
+	logging.info(info)
+	logger.setLevel(logging.INFO)
+
+def timing(func):
+    @wraps(func)
+    def time_count(*args, **kwargs):
+        t_start = time.time()
+        values = func(*args, **kwargs)
+        t_end = time.time()
+        print_log(f"{func.__name__} time consuming:  {(t_end - t_start):.3f} seconds")
+        return values
+    return time_count
 
 def get_config():
 	'''
@@ -71,6 +93,7 @@ def check_message_length(text, length):
 			text = text.replace(url, '')
 	return len(text) <= length
 
+@timing
 def ask_gpt(message, model="gpt-3.5-turbo"):
 	token_id = get_openai_key_id()
 	DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
@@ -101,16 +124,14 @@ def question_pos_parser(question, retry=3, web_id='nineyi000360', mode='N'):
 	forbidden_words = {'client_msg_id', '什麼', '有', '我', '你', '妳', '你們', '妳們', '沒有', '怎麼', '怎'}
 	while not stopSwitch and retry:
 		if mode == 'N':
-			print('ask')
 			keyword = ask_gpt(f'To "{question}", choose the {min((len(seg_list) + 2) // 3, 3)} most important NOUN from "{seg_list}" with sep by ", "').replace('\n','').replace('"','').replace("。",'')
-			print('ask_finished')
 			keyword = [i.strip() for i in keyword.split(',') if not any(re.search(w,i) for w in forbidden_words)]
 		stopSwitch = len(keyword) > 0
 		retry -= 1
 	if not keyword:
 		keyword = [ask_gpt(f'Choose one important word  from "{question}". Just reply the word in 繁體中文.').replace('\n', '').replace('"','').replace("。", '')]
-	print(keyword)
-	return keyword
+	print_log(keyword)
+	return list(map(translation_stw, keyword))
 
 def translation_stw(text):
 	cc = OpenCC('s2twp')
@@ -122,12 +143,12 @@ def google_search(keyword_list, html ,retry):
 		keyword_combination += list(itertools.combinations(sorted(keyword_list, key=len, reverse=True), i))
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
-		print('搜尋關鍵字:\t', kw)
+		print_log(f'Keyword for search:\t {kw}')
 		search_html = html + kw
-		print(search_html)
+		print_log(f'Search URL:\t {search_html}')
 		stopSwitch, cnt, result = False, 1, None
 		while not stopSwitch and cnt != retry + 1:
-			print(f'第{cnt}次搜尋')
+			print_log(f'Search times:\t {cnt}')
 			response = requests.get(search_html)
 			if response:
 				stopSwitch = response.status_code == 200
@@ -136,9 +157,11 @@ def google_search(keyword_list, html ,retry):
 			cnt += 1
 		if result: break
 	if not stopSwitch:
-		return '網頁錯誤', '+'.join(keyword_list)
-	return result , result_kw
+		print_log(f"URL ERROR: {html}, {'+'.join(keyword_list)}")
+		return 'URL ERROR', '+'.join(keyword_list)
+	return result, result_kw
 
+@timing
 def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
 	if len(keyword_list) > keyword_length:
 		keyword_list = keyword_list[:keyword_length]
@@ -147,16 +170,16 @@ def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
 	if CONFIG[web_id]['sub_domain_cx']!= '_':
 		html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={CONFIG[web_id]['sub_domain_cx']}&key={GOOGLE_SEARCH_KEY}&q="
 		result, result_kw = google_search(keyword_list, html, 3)
-		if result == '網頁錯誤':
+		if result == 'URL ERROR':
 			result, result_kw = google_search(keyword_list, html[:42] + html[55:], 1)
-	if (not result or result == '網頁錯誤') and CONFIG[web_id]['domain_cx']!= '_':
+	if (not result or result == 'URL ERROR') and CONFIG[web_id]['domain_cx']!= '_':
 		html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={CONFIG[web_id]['domain_cx']}&key={GOOGLE_SEARCH_KEY}&q="
 		result, result_kw = google_search(keyword_list, html, 3)
-		if result == '網頁錯誤':
+		if result == 'URL ERROR':
 			result, result_kw = google_search(keyword_list, html[:42] + html[55:], 1)
-	if (not result or result == '網頁錯誤') and str(CONFIG[web_id]['mode']) == '3':
+	if (not result or result == 'URL ERROR') and str(CONFIG[web_id]['mode']) == '3':
 		result, result_kw = google_search(keyword_list, f"https://www.googleapis.com/customsearch/v1?cx=46d551baeb2bc4ead&key={GOOGLE_SEARCH_KEY}&q={CONFIG[web_id]['web_name'].replace(' ', '+')}+", 1)
-	return (result, result_kw) if result else ('無搜尋結果', '+'.join(keyword_list))
+	return (result, result_kw) if result else ('NO RESULTS', '+'.join(keyword_list))
 
 def get_gpt_query(result, query, history, web_id):
 	'''
@@ -197,7 +220,7 @@ def get_gpt_query(result, query, history, web_id):
 				continue
 			url = v.get('link')
 			url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
-			print('搜尋結果:\t', url)
+			print_log(f'Search results:\t {url}')
 			if url in linkSet:
 				continue
 			linkSet.add(url)
@@ -216,16 +239,19 @@ def get_gpt_query(result, query, history, web_id):
 	return message
 
 def replace_answer(gpt3_ans):
-	print("chatGPT原生回答\t", gpt3_ans)
-	print(re.findall('https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+',gpt3_ans))
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\|.*>)', gpt3_ans):
+	print_log(f"ChatGPT reply：\t {gpt3_ans}")
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\?/=+&#$%^;%_]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+', gpt3_ans)):
-		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
+	url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', gpt3_ans))), key=len , reverse=True)
+	for url in url_set:
+		reurl = url
+		for char in '?':
+			reurl = reurl.replace(char, '\\' + char)
+		gpt3_ans = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', '<' + url + '|查看更多>', gpt3_ans)
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
 		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
@@ -262,18 +288,20 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	# Step 1: get keyword from chatGPT (timeout = 3s)
 	try:
 		keyword_list = func_timeout(3, question_pos_parser,(message, 3, web_id))
-	except EX.FunctionTimedOut:
+	except Exception as e:
+		print_log(f'{traceback.format_tb(e.__traceback__)[-1]} ERROR: {e}')
 		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 		return
-	print('關鍵字:\t', keyword_list)
+	print_log(f'keywords:\t {keyword_list}')
 
 	# Step 2: get gpt_query with search results from google search engine (timeout = 5s)
 	try:
 		result, keyword = func_timeout(5, likr_search, (keyword_list, web_id))
-	except EX.FunctionTimedOut:
+	except Exception as e:
+		print_log(f'{traceback.format_tb(e.__traceback__)[-1]} ERROR: {e}')
 		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 		return
-	if result == '網頁錯誤':
+	if result == 'URL ERROR':
 		say(text=f"發生錯誤，請再詢問一次！", channel=dm_channel, thread_ts=ts)
 		ts_set.add(ts)
 		return
@@ -284,24 +312,24 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		while len(str(history)) > 3000 and len(history) > 3:
 			history = history[2:]
 
-	if result == '無搜尋結果' and CONFIG[web_id]['mode'] == 2:
+	if result == 'NO RESULTS' and CONFIG[web_id]['mode'] == 2:
 		gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 	else:
 		# Step 3: response from chatGPT (timeout = 60s)
 		timeoutSwitch = False
 		gpt_query = get_gpt_query(result, message, history, web_id)
-		print('chatGPT輸入:\t', gpt_query)
+		print_log(f'ChatGPT input:\t {gpt_query}')
 		try:
 			gpt3_answer = func_timeout(60, ask_gpt, (gpt_query,))
-		except EX.FunctionTimedOut:
+		except Exception as e:
+			print_log(f'{traceback.format_tb(e.__traceback__)[-1]} ERROR: {e}')
 			say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 			timeoutSwitch = True
 			gpt3_answer = ask_gpt(gpt_query)
 		gpt3_answer_slack = replace_answer(gpt3_answer)
-		print('cahtGPT輸出:\t', gpt3_answer_slack)
+		print_log(f'ChatGPT output:\t {gpt3_answer_slack}')
 	if not timeoutSwitch:
 		say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
-
 
 	if history:
 		history.append({"role": "assistant", "content": f"{gpt3_answer}"})
@@ -337,6 +365,7 @@ def show_bert_qa(message, body, say):
 		return
 
 	if not check_message_length(text, 50):
+		print_log('USER ERROR: Input too long!')
 		say(text=f"親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。", channel=dm_channel, thread_ts=ts)
 		return
 
