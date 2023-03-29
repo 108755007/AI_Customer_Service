@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 sys.path.append("..")
 load_dotenv()
 import re, json, requests, itertools
-from func_timeout import func_timeout, exceptions as EX
+from func_timeout import func_timeout
 from datetime import datetime
 import pandas as pd
 import jieba
@@ -137,7 +137,7 @@ def google_search(keyword_list, html ,retry):
 		if result: break
 	if not stopSwitch:
 		return '網頁錯誤', '+'.join(keyword_list)
-	return result , result_kw
+	return result, result_kw
 
 def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
 	if len(keyword_list) > keyword_length:
@@ -217,15 +217,19 @@ def get_gpt_query(result, query, history, web_id):
 
 def replace_answer(gpt3_ans):
 	print("chatGPT原生回答\t", gpt3_ans)
-	print(re.findall('https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+',gpt3_ans))
-	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+)\|.*>)', gpt3_ans):
+	print(re.findall('https?:\/\/[\w\.\-\?/=+&#$%^;%_]+',gpt3_ans))
+	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\?/=+&#$%^;%_]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+)\)?)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
 	gpt3_ans = translation_stw(gpt3_ans)
 	gpt3_ans = gpt3_ans.replace('，\n', '，')
-	for url in set(re.findall(r'https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+', gpt3_ans)):
-		gpt3_ans = re.sub(url+'(?!\w)', '<' + url + '|查看更多>',gpt3_ans)
+	url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', gpt3_ans))), key=len , reverse=True)
+	for url in url_set:
+		reurl = url
+		for char in '?':
+			reurl = reurl.replace(char, '\\' + char)
+		gpt3_ans = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', '<' + url + '|查看更多>', gpt3_ans)
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
 		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
@@ -262,7 +266,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	# Step 1: get keyword from chatGPT (timeout = 3s)
 	try:
 		keyword_list = func_timeout(3, question_pos_parser,(message, 3, web_id))
-	except EX.FunctionTimedOut:
+	except:
 		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 		return
 	print('關鍵字:\t', keyword_list)
@@ -270,7 +274,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	# Step 2: get gpt_query with search results from google search engine (timeout = 5s)
 	try:
 		result, keyword = func_timeout(5, likr_search, (keyword_list, web_id))
-	except EX.FunctionTimedOut:
+	except:
 		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 		return
 	if result == '網頁錯誤':
@@ -293,7 +297,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		print('chatGPT輸入:\t', gpt_query)
 		try:
 			gpt3_answer = func_timeout(60, ask_gpt, (gpt_query,))
-		except EX.FunctionTimedOut:
+		except:
 			say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 			timeoutSwitch = True
 			gpt3_answer = ask_gpt(gpt_query)
