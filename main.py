@@ -135,7 +135,7 @@ def question_pos_parser(question, retry=3, web_id='nineyi000360'):
 	return list(map(translation_stw, keyword))
 
 def translation_stw(text):
-	cc = OpenCC('s2twp')
+	cc = OpenCC('likr-s2twp')
 	return cc.convert(text)
 
 def google_search(keyword_combination, html ,retry):
