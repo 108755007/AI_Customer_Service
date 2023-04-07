@@ -17,7 +17,7 @@ from db import DBhelper
 from recommend_api import Search_engine
 engine = Search_engine()
 
-DEBUG = False
+DEBUG = True
 date = datetime.today().strftime('%Y/%m/%d')
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -232,45 +232,42 @@ def get_gpt_query(result, query, history, web_id):
 	'''
 	message = history if history else [{"role": "system", "content": f"我們是{CONFIG[web_id]['web_name']}(代號：{CONFIG[web_id]['web_id']},官方網站：{CONFIG[web_id]['web_url']}),{CONFIG[web_id]['description']}"}]
 	if type(result) != str:
-		linkSet = set()
+		linkList = []
 		chatgpt_query = """\nResults:"""
 		for v in result:
-			if not v.get('link') or len(linkSet) == 3:
+			if not v.get('link') or len(linkList) == 3:
 				continue
 			url = v.get('link')
 			url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
 			print_log(f'Input results:\t {url}')
-			if url in linkSet:
+			linkList.append(url)
+			if url in linkList:
 				continue
-			linkSet.add(url)
 			if v.get('htmlTitle'):
-				chatgpt_query += f"""\n\n[{len(linkSet)}] "{v.get('htmlTitle')}"""
+				chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('htmlTitle')}"""
 			if v.get('snippet'):
 				chatgpt_query += f""",snippet = "{v.get('snippet')}"""
 			if v.get('pagemap') and v.get('pagemap').get('metatags'):
 				chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-			if len(url) < 120:
-				chatgpt_query += f"""\nURL: "{url}" """
-		chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite results using [[number](URL)] notation in the sentence's end when using the information from results.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+		chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{CONFIG[web_id]['web_name']}"({web_id}) customer service. Using the information of results, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite the information from the provided results using the [number] notation.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	else:
 		chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{CONFIG[web_id]['web_name']}"({web_id}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	message += [{'role': 'user', 'content': chatgpt_query}]
-	return message
+	return message, linkList
 
-def replace_answer(gpt3_ans):
+def replace_answer(gpt3_ans, linkList):
 	print_log(f"ChatGPT reply：\t {gpt3_ans}")
 	for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\?/=+&#$%^;%_]+)\|.*>)', gpt3_ans):
 		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+)\)?)', gpt3_ans):
-		gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-	gpt3_ans = translation_stw(gpt3_ans)
-	gpt3_ans = gpt3_ans.replace('，\n', '，')
+	gpt3_ans = translation_stw(gpt3_ans).replace('，\n', '，')
 	url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', gpt3_ans))), key=len , reverse=True)
 	for url in url_set:
 		reurl = url
 		for char in '?':
 			reurl = reurl.replace(char, '\\' + char)
 		gpt3_ans = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', '<' + url + '|查看更多>', gpt3_ans)
+	for i, url in enumerate(linkList):
+		gpt3_ans = re.sub(f'\[{i + 1}\]', f'[<{url}|查看更多>]', gpt3_ans)
 	replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
 	for w in replace_words:
 		gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
@@ -348,11 +345,10 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 			say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 			timeoutSwitch = True
 			gpt3_answer = ask_gpt(gpt_query)
-		gpt3_answer_slack = replace_answer(gpt3_answer)
+		gpt3_answer_slack = replace_answer(gpt3_answer, linkList)
 		print_log(f'ChatGPT output:\t {gpt3_answer_slack}')
 	if not timeoutSwitch:
 		say(text=f"{gpt3_answer_slack}", channel=dm_channel, thread_ts=ts)
-
 	if history:
 		gpt_query.append({"role": "assistant", "content": f"{gpt3_answer}"})
 		QA_report_df['counts'] += 1
@@ -376,7 +372,7 @@ def show_bert_qa(message, body, say):
 	text = message['text']
 	ts = message['ts']
 	thread_ts = body.get('event').get('thread_ts')
-	# no reply
+	# do not reply
 	if ts in ts_set or float(now_ts) > float(ts) or \
 		dm_channel not in CHANNEL or \
 		'bot_profile' in body['event']:
@@ -392,7 +388,7 @@ def show_bert_qa(message, body, say):
 		print_log('USER ERROR: Input too long!')
 		say(text=f"親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。", channel=dm_channel, thread_ts=ts)
 		return
-
+	print_log(f'Get Message:\t{text}')
 	gpt_QA(text, dm_channel, user_id, ts, thread_ts, say)
 	return
 
