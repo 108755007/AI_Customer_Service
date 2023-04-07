@@ -14,6 +14,8 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
 from db import DBhelper
+from recommend_api import Search_engine
+engine = Search_engine()
 
 DEBUG = False
 date = datetime.today().strftime('%Y/%m/%d')
@@ -187,6 +189,19 @@ def likr_search(keyword_list, web_id='nineyi000360', keyword_length=3):
 		result_kw = '+'.join(keyword_list)
 	return result, result_kw
 
+def reset_result_order(result_search, result_recommend, flags, web_id):
+	qa_url = [i.strip('*')for i in CONFIG[web_id]['qa_url'].split(',')]
+	result = []
+	if type(result_search) == str:
+		for v in result_search[:5]:
+			if v.get('link') and qa_url in v.get('link'):
+				result += v
+	if flags.get('is_hot') or type(result_search) == str:
+		result += result_recommend
+	else:
+		result += (result_recommend[:2] + result_search)
+	return result
+
 def get_gpt_query(result, query, history, web_id):
 	'''
 	:param query: result from likr_search
@@ -302,6 +317,8 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 	try:
 		result, keyword = func_timeout(10, likr_search, (keyword_list, web_id))
 		print_log(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
+		result_recommend, flags = func_timeout(20, engine.likr_recommend_engine, (message, web_id))
+		print_log(f'recommend_result:\t {[i.get("link") for i in result_recommend if i.get("link")], flags}')
 	except Exception as e:
 		say(text=f"伺服器忙碌中，請稍後再試。", channel=dm_channel, thread_ts=ts)
 		print_log(f'{traceback.format_tb(e.__traceback__)[-1]} ERROR: {e}')
@@ -319,6 +336,7 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		history = None
 		if len(QA_report_df) > 0:
 			history = json.loads(QA_report_df['q_a_history'].iloc[0])
+		result = reset_result_order(result, result_recommend, flags, web_id)
 		gpt_query = get_gpt_query(result, message, history, web_id)
 		while len(str(gpt_query)) > 3000 and len(gpt_query) > 3:
 			gpt_query = [gpt_query[0]] + gpt_query[3:]
