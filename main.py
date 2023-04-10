@@ -13,6 +13,7 @@ from opencc import OpenCC
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 import openai
+import tiktoken
 from db import DBhelper
 from recommend_api import Search_engine
 engine = Search_engine()
@@ -140,6 +141,36 @@ def translation_stw(text):
 	cc = OpenCC('likr-s2twp')
 	return cc.convert(text)
 
+def num_tokens_from_messages(messages, model="gpt-3.5-turbo"):
+    """Returns the number of tokens used by a list of messages."""
+    try:
+        encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        print("Warning: model not found. Using cl100k_base encoding.")
+        encoding = tiktoken.get_encoding("cl100k_base")
+
+    if model == "gpt-3.5-turbo-0301":
+        return num_tokens_from_messages(messages, model="gpt-3.5-turbo")
+    elif model == "gpt-4":
+        return num_tokens_from_messages(messages, model="gpt-4-0314")
+    elif model == "gpt-3.5-turbo":
+        tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        tokens_per_name = -1  # if there's a name, the role is omitted
+    elif model == "gpt-4-0314":
+        tokens_per_message = 3
+        tokens_per_name = 1
+    else:
+        raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
+    num_tokens = 0
+    for message in messages:
+        num_tokens += tokens_per_message
+        for key, value in message.items():
+            num_tokens += len(encoding.encode(value))
+            if key == "name":
+                num_tokens += tokens_per_name
+    num_tokens += 3
+    return num_tokens
+
 def google_search(keyword_combination, html ,retry):
 	for kw in keyword_combination:
 		kw = '+'.join(kw)
@@ -199,7 +230,7 @@ def reset_result_order(result_search, result_recommend, flags, web_id):
 	if flags.get('is_hot') or type(result_search) == str:
 		result += result_recommend
 	else:
-		result += (result_recommend[:2] + result_search)
+		result += (result_recommend[:1] + result_search)
 	return result
 
 def get_gpt_query(result, query, history, web_id):
@@ -239,19 +270,19 @@ def get_gpt_query(result, query, history, web_id):
 				continue
 			url = v.get('link')
 			url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
-			print_log(f'Input results:\t {url}')
-			linkList.append(url)
 			if url in linkList:
 				continue
+			print_log(f'Input results:\t {url}')
+			linkList.append(url)
 			if v.get('htmlTitle'):
 				chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('htmlTitle')}"""
 			if v.get('snippet'):
 				chatgpt_query += f""",snippet = "{v.get('snippet')}"""
 			if v.get('pagemap') and v.get('pagemap').get('metatags'):
 				chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-		chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{CONFIG[web_id]['web_name']}"({web_id}) customer service. Using the information of results, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite the information from the provided results using the [number] notation.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+		chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{CONFIG[web_id]['web_name']}" customer service. Using the information of results, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	else:
-		chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{CONFIG[web_id]['web_name']}"({web_id}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+		chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{CONFIG[web_id]['web_name']}" customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
 	message += [{'role': 'user', 'content': chatgpt_query}]
 	return message, linkList
 
@@ -334,10 +365,11 @@ def gpt_QA(message, dm_channel, user_id, ts, thread_ts, say):
 		if len(QA_report_df) > 0:
 			history = json.loads(QA_report_df['q_a_history'].iloc[0])
 		result = reset_result_order(result, result_recommend, flags, web_id)
-		gpt_query = get_gpt_query(result, message, history, web_id)
-		while len(str(gpt_query)) > 3000 and len(gpt_query) > 3:
+		gpt_query, linkList = get_gpt_query(result, message, history, web_id)
+		while num_tokens_from_messages(gpt_query) > 4096 and len(gpt_query) > 3:
 			gpt_query = [gpt_query[0]] + gpt_query[3:]
 		print_log(f'ChatGPT input:\t {gpt_query}')
+		print_log(f'tokens number:\t{num_tokens_from_messages(gpt_query)}')
 		try:
 			gpt3_answer = func_timeout(60, ask_gpt, (gpt_query,))
 		except Exception as e:
