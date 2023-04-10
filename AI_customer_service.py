@@ -139,7 +139,7 @@ class AI_customer_service:
         keyword_combination = []
         for i in range(len(keyword_list), 0, -1):
             keyword_combination += list(itertools.combinations(sorted(keyword_list, key=len, reverse=True), i))
-        ##todo 推薦引擎
+
         if self.CONFIG[web_id]['domain_cx'] != '_':
             html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={self.CONFIG[web_id]['domain_cx']}&key={self.GOOGLE_SEARCH_KEY}&q="
             result, result_kw = self.google_search(keyword_combination, html, 3)
