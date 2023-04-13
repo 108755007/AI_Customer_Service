@@ -6,12 +6,11 @@ import pandas as pd
 from datetime import datetime
 from func_timeout import func_timeout
 import jieba
-from jieba import posseg
 import openai
 import tiktoken
 from db import DBhelper
 from log import logger
-from AI_customer_service_utils import translation_stw, fetch_url_response
+from AI_customer_service_utils import translation_stw
 from likr_Search_engine import Search_engine
 
 class ChatGPT_AVD:
@@ -81,8 +80,7 @@ class ChatGPT_AVD:
         chatgpt_query
             Results:
 
-            [1] "{g[0]['snippet']}"
-            URL: "{g[0]['link']}"
+            [1] "result[0]['htmlTitle']}",snippet= "{result[0]['snippet']}",description = "{result[0]['snippet']}"
 
             [2] "{g[1]['snippet']}"
             URL: "{g[1]['link']}"
@@ -90,12 +88,11 @@ class ChatGPT_AVD:
             [3] "{g[2]['snippet']}"
             URL: "{g[2]['link']}"
 
-
             Current date: {date}
 
-            Instructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:
-            Always cite results using [[number](URL)] notation in the sentence's end when using the information from results.
-            Write separate answers for each subject.
+            Instructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:
+            Always cite the information from the provided results using the [number] notation in the end of that sentence.
+            Write Bullet list for each subject if you recommend products.
             "親愛的顧客您好，" in the beginning.
             "祝您愉快！" in the end.
 
@@ -126,16 +123,16 @@ class ChatGPT_AVD:
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
-        while self.num_tokens_from_messages(gpt_query) > 3800 and len(gpt_query) > 3:
+        while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
         return gpt_query, linkList
 
 class QA_api:
-    def __init__(self, logger, frontend):
-        self.logger = logger
+    def __init__(self, frontend, logger):
         self.CONFIG = self.get_config()
         self.ChatGPT = ChatGPT_AVD()
-        self.search = Search_engine(self.CONFIG)
+        self.Search = Search_engine()
+        self.logger = logger
         self.frontend = frontend
         if frontend == 'line':
             self.table_surffix = '_api'
@@ -143,6 +140,7 @@ class QA_api:
         elif frontend == 'slack':
             self.table_surffix = ''
             self.url_format = lambda x: '<' + x + '|查看更多>'
+
     def get_config(self):
         '''
         Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
@@ -157,40 +155,32 @@ class QA_api:
                 config_dict[conf[1]][k] = v
         return config_dict
 
-    def check_message_length(self, message:str, length:int=50):
+    def check_message_length(self, message: str, length: int=50):
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
             if self.fetch_url_response(url):
                 message = message.replace(url, '')
         return len(message) <= length
 
-    def get_question_keyword(self, message:str, retry:int=3, web_id:str='nineyi000360') -> list:
-        '''
-        :param mode: N => just filter noun
-        --------
-        It will early return when there's only one word after segmentation.
-        It will return one word chosen by chatGPT when there are no words after filtering by chatGPT.
-        '''
+    def get_question_keyword(self, message: str, web_id: str) -> list:
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有',
+                           '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
+        # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
-            message = message.replace(i, '')
+            message = re.sub(i, '', message)
             for j in list(jieba.cut(i)):
-                if j in message:
-                    message = message.replace(j, '')
-        stopSwitch, retry, keyword = False, retry, ''
-        forbidden_words = {'client_msg_id', '什麼', '有', '我', '你', '妳', '你們', '妳們', '沒有', '怎麼', '怎', '如何', '要'}
-        not_noun_list = [w for w, p in list(posseg.cut(message)) if 'n' not in p.lower()]
-        while not stopSwitch and retry:
-            keyword = self.ChatGPT.ask_gpt(f"""To "{message}", choose the {min((len(message) + 2) // 3, 3)} most important words that are always used as nouns and cannot exceed 3 Chinese characters, and separate by " ".""",
-                model='gpt-4').replace('\n', '').replace('"', '').replace("。", '')
-            keyword = [i.strip('.') for i in keyword.split(' ') if
-                       not any(re.search(w, i.strip('.')) for w in forbidden_words) and i.strip(
-                           '.') not in not_noun_list and i.strip('.') in message]
-            stopSwitch = len(keyword) > 0
-            retry -= 1
-        if not keyword:
-            keyword = [self.ChatGPT.ask_gpt(f'Choose one important word from "{message}". Just reply the word in 繁體中文.',
-                               model='gpt-4').split(' ')[0].replace('\n', '').replace('"', '').replace("。", '')]
-        return list(map(translation_stw, keyword))
+                message = re.sub(j, '', message)
+        # segmentation
+        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,若存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
+                                      {'role': 'user', 'content': f'{message}'}],
+                                     model='gpt-4')
+        if reply == 'timeout': return 'timeout'
+        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+        if not keyword_list:
+            keyword_list = [self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content選擇一個最重要的關鍵字。並且只回答此格式 "關鍵字" ,不需要其他解釋'},
+                                                  {'role': 'user', 'content': f'{message}'}],
+                                                 model='gpt-4')]
+        return keyword_list
 
     def reset_result_order(self, result_search, result_recommend, flags, web_id):
         qa_url = [i.strip('*') for i in self.CONFIG[web_id]['qa_url'].split(',')]
@@ -205,7 +195,7 @@ class QA_api:
             result += (result_recommend[:1] + result_search)
         return result
 
-    def adjust_ans_url_format(self, answer:str, linkList:list) -> str:
+    def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
         for url in url_set:
             reurl = url
@@ -249,7 +239,6 @@ class QA_api:
             elif self.frontend == 'slack':
                 history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
                                           columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
-
         history_df['counts'] += 1
         history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
         _df = history_df.drop(columns=['keyword', 'response_time'])
@@ -264,22 +253,23 @@ class QA_api:
         self.logger.print(*arg, level="WARNING")
         return '客服忙碌中，請稍後再試。'
 
-    def QA(self, web_id, message, info):
+    def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
+        self.logger.print(f'Get Message:\t{message}')
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
         history_df = self.get_history_df(web_id, info)
 
         # Step 1: get keyword from chatGPT
-        keyword_list = self.get_question_keyword(message, 3, web_id)
-        if type(keyword_list) == str:
+        keyword_list = self.get_question_keyword(message, web_id)
+        if keyword_list == 'timeout':
             return self.error('keyword_timeout')
         self.logger.print('關鍵字:\t', keyword_list)
 
         # Step 2: get gpt_query with search results from google search engine and likr recommend engine
         try:
-            result, keyword = func_timeout(10, self.search.likr_search, (keyword_list, web_id))
+            result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
             self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
             ##todo 推薦引擎 result_recommend, flags = func_timeout(20, engine.likr_recommend_engine, (message, web_id))
         except Exception as e:
@@ -310,15 +300,12 @@ class QA_api:
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
         return answer
 
-
-
 if __name__ == "__main__":
-    logger = logger()
     # slack
-    AI_customer_service = QA_api(logger, 'slack')
+    AI_customer_service = QA_api('slack', logger())
     print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
-    AI_customer_service = QA_api(logger, 'line')
+    AI_customer_service = QA_api('line', logger())
     print(AI_customer_service.QA('pure17', '有沒有健步機', 'test4466'))
 
 
