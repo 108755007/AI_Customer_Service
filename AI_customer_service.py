@@ -1,167 +1,79 @@
-import os, sys
+import os
 from dotenv import load_dotenv
-sys.path.append("..")
-from func_timeout import func_timeout
-import datetime
-import time
 load_dotenv()
-import os, sys, logging
-import re, json, requests
-import itertools
+import re, json, time
 import pandas as pd
+from datetime import datetime
+from func_timeout import func_timeout
 import jieba
-from opencc import OpenCC
-import openai
-from db import DBhelper
 from jieba import posseg
+import openai
+import tiktoken
+from db import DBhelper
+from log import logger
+from AI_customer_service_utils import translation_stw, fetch_url_response
+from likr_Search_engine import Search_engine
 
-
-class AI_customer_service:
+class ChatGPT_AVD:
     def __init__(self):
         self.OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
-        self.GOOGLE_SEARCH_KEY = os.getenv('GOOGLE_SEARCH_KEY')
-        self.CONFIG = self.get_config()
-
-    def get_openai_key_id(self,model):
-        if 'gpt-4' in model:
-            opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id, counts FROM web_push.AI_service_token_counter x WHERE id < 6 ORDER BY counts limit 1;")
-        else:
-            opena_ai_key_id = DBhelper('jupiter_new').ExecuteSelect("SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;")
-        return opena_ai_key_id[0][0]
 
     def get_keys(func):
         def inner(self,message, model="gpt-3.5-turbo", timeout=60):
-            print(model)
-            token_id = self.get_openai_key_id(model)
+            # get token_id
+            query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
+            if 'gpt-4' in model:
+                query = 'x WHERE id < 6'.join(query.split('x'))
+            token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
+
+            # update token counter
             DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
             try:
-                ans = func_timeout(timeout, func, (self,message, token_id, model))
-            except:
-                ans = 'timeout'
+                res = func_timeout(timeout, func, (self, message, token_id, model))
+            except Exception as e:
+                res = 'timeout'
             DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
-            return ans
+            return res
         return inner
 
-    def get_config(self):
-        '''
-        Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
-        '''
-        config_dict = {}
-        config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config where mode != 0;")
-        config_col = [i[0] for i in DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
-        for conf in config:
-            config_dict[conf[1]] = {}
-            for k, v in zip(config_col, conf):
-                config_dict[conf[1]][k] = v
-        return config_dict
-
-    def check_message_length(self,text, length):
-        for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', text):
-            stopSwitch, retry, result = False, 3, None
-            while not stopSwitch and retry:
-                try:
-                    response = requests.get(url)
-                except Exception as e:
-                    break
-                if response:
-                    stopSwitch = True
-                retry -= 1
-            print(response.status_code)
-            if stopSwitch and response.status_code == 200:
-                text = text.replace(url, '')
-        return len(text) <= length
-
     @get_keys
-    def ask_gpt(self,message, token_id=None, model="gpt-3.5-turbo"):
+    def ask_gpt(self, message, token_id=None, model="gpt-3.5-turbo"):
         openai.api_key = self.OPEN_AI_KEY_DICT[token_id]
         if type(message) == str:
             message = [{'role': 'user', 'content': message}]
         completion = openai.ChatCompletion.create(model=model, messages=message)
         return completion['choices'][0]['message']['content']
 
-    def question_pos_parser(self,question, retry=3, web_id='nineyi000360'):
-        '''
-        :param mode: N => just filter noun
-        --------
-        It will early return when there's only one word after segmentation.
-        It will return one word chosen by chatGPT when there are no words after filtering by chatGPT.
-        '''
-        question = self.translation_stw(question).lower()
-        for i in [self.CONFIG[web_id]['web_id'], self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
-            question = question.replace(i, '')
-            for j in list(jieba.cut(i)):
-                if j in question:
-                    question = question.replace(j, '')
-        stopSwitch, retry, keyword = False, retry, ''
-        forbidden_words = {'client_msg_id', '什麼', '有', '我', '你', '妳', '你們', '妳們', '沒有', '怎麼', '怎','如何', '要'}
-        not_noun_list = [w for w, p in list(posseg.cut(question)) if 'n' not in p.lower()]
-        while not stopSwitch and retry:
-            keyword = self.ask_gpt(f"""To "{question}", choose the {min((len(question) + 2) // 3, 3)} most important words that are always used as nouns and cannot exceed 3 Chinese characters, and separate by " ".""",model='gpt-4').replace('\n', '').replace('"', '').replace("。", '')
-            keyword = [i.strip('.') for i in keyword.split(' ') if not any(re.search(w, i.strip('.')) for w in forbidden_words) and i.strip('.') not in not_noun_list and i.strip('.') in question]
-            stopSwitch = len(keyword) > 0
-            retry -= 1
-        if not keyword:
-            keyword = [self.ask_gpt(f'Choose one important word from "{question}". Just reply the word in 繁體中文.',model='gpt-4').split(' ')[0].replace('\n', '').replace('"', '').replace("。", '')]
-        print(keyword)
-        if keyword == 'timeout':
-            print('keyword_error')
-            return 'timeout'
-        return list(map(self.translation_stw, keyword))
+    def num_tokens_from_messages(self, messages, model="gpt-3.5-turbo"):
+        """Returns the number of tokens used by a list of messages."""
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except KeyError:
+            encoding = tiktoken.get_encoding("cl100k_base")
 
-    def translation_stw(self,text):
-        cc = OpenCC('likr-s2twp')
-        return cc.convert(text)
+        if model == "gpt-3.5-turbo-0301":
+            return self.num_tokens_from_messages(messages, model="gpt-3.5-turbo")
+        elif model == "gpt-4":
+            return self.num_tokens_from_messages(messages, model="gpt-4-0314")
+        elif model == "gpt-3.5-turbo":
+            tokens_per_message = 4  # every message follows <|start|>{role/name}\n{content}<|end|>\n
+            tokens_per_name = -1  # if there's a name, the role is omitted
+        elif model == "gpt-4-0314":
+            tokens_per_message = 3
+            tokens_per_name = 1
+        else:
+            raise NotImplementedError(f"""num_tokens_from_messages() is not implemented for model {model}. See https://github.com/openai/openai-python/blob/main/chatml.md for information on how messages are converted to tokens.""")
+        num_tokens = 0
+        for message in messages:
+            num_tokens += tokens_per_message
+            for key, value in message.items():
+                num_tokens += len(encoding.encode(value))
+                if key == "name":
+                    num_tokens += tokens_per_name
+        num_tokens += 3
+        return num_tokens
 
-    def google_search(self,keyword_combination, html, retry):
-        for kw in keyword_combination:
-            kw = '+'.join(kw)
-            print(f'Keyword for search:\t {kw}')
-            search_html = html + kw
-            print(f'Search URL:\t {search_html}')
-            stopSwitch, cnt, result = False, 1, None
-            while not stopSwitch and cnt != retry + 1:
-                print(f'Search times:\t {cnt}')
-                response = requests.get(search_html)
-                if response:
-                    stopSwitch = response.status_code == 200
-                    result = response.json().get('items')
-                    result_kw = kw
-                cnt += 1
-            if result: break
-        if not stopSwitch:
-            return 'URL ERROR', None
-        return result, result_kw
-
-    def likr_search(self,keyword_list, web_id='nineyi000360', keyword_length=3):
-        if len(keyword_list) > keyword_length:
-            keyword_list = keyword_list[:keyword_length]
-        result = None
-        keyword_combination = []
-        for i in range(len(keyword_list), 0, -1):
-            keyword_combination += list(itertools.combinations(sorted(keyword_list, key=len, reverse=True), i))
-
-        if self.CONFIG[web_id]['domain_cx'] != '_':
-            html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={self.CONFIG[web_id]['domain_cx']}&key={self.GOOGLE_SEARCH_KEY}&q="
-            result, result_kw = self.google_search(keyword_combination, html, 3)
-            if result == 'URL ERROR':
-                result, result_kw = self.google_search(keyword_combination, html[:42] + html[55:], 1)
-        if (not result or result == 'URL ERROR') and self.CONFIG[web_id]['sub_domain_cx'] != '_':
-            html = f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={self.CONFIG[web_id]['sub_domain_cx']}&key={self.GOOGLE_SEARCH_KEY}&q="
-            result, result_kw = self.google_search(keyword_combination, html, 3)
-            if result == 'URL ERROR':
-                result, result_kw = self.google_search(keyword_combination, html[:42] + html[55:], 1)
-        if (not result or result == 'URL ERROR') and str(self.CONFIG[web_id]['mode']) == '3':
-            result, result_kw = self.google_search(keyword_combination,f"https://www.googleapis.com/customsearch/v1?cx=46d551baeb2bc4ead&key={self.GOOGLE_SEARCH_KEY}&q={self.CONFIG[web_id]['web_name'].replace(' ', '+')}+",1)
-        if not result:
-            print(f"No results: {html}, {'+'.join(keyword_list)}")
-            result, result_kw = [{'NO RESULTS': True}], '+'.join(keyword_list)
-        elif result == 'URL ERROR':
-            result = [{'URL ERROR': True}]
-            print(f"URL ERROR: {html}, {'+'.join(keyword_list)}")
-            result_kw = '+'.join(keyword_list)
-        return result, result_kw
-
-    def get_gpt_query(self,result, query, history, web_id):
+    def get_gpt_query(self, result, message, history, web_id_conf):
         '''
         :param query: result from likr_search
         :param query: question for chatgpt
@@ -187,131 +99,227 @@ class AI_customer_service:
             "親愛的顧客您好，" in the beginning.
             "祝您愉快！" in the end.
 
-            Query: {query}
+            Query: {message}
         '''
-        date = datetime.datetime.today().strftime('%Y/%m/%d')
-        message = history if history else [{"role": "system",
-                                            "content": f"我們是{self.CONFIG[web_id]['web_name']}(代號：{self.CONFIG[web_id]['web_id']},官方網站：{self.CONFIG[web_id]['web_url']}),{self.CONFIG[web_id]['description']}"}]
-        print(self.CONFIG[web_id]['description'])
+        date = datetime.today().strftime('%Y/%m/%d')
+        gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         if type(result) != str:
-            linkSet = set()
+            linkList = []
             chatgpt_query = """\nResults:"""
             for v in result:
-                if not v.get('link') or len(linkSet) == 3:
+                if not v.get('link') or len(linkList) == 3:
                     continue
                 url = v.get('link')
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
                 print('搜尋結果:\t', url)
-                if url in linkSet:
+                if url in linkList:
                     continue
-                linkSet.add(url)
-
+                linkList.append(url)
                 if v.get('htmlTitle'):
-                    chatgpt_query += f"""\n\n[{len(linkSet)}] "{v.get('htmlTitle')}"""
+                    chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('htmlTitle')}"""
                 if v.get('snippet'):
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
-                if v.get('pagemap') and v.get('pagemap').get('metatags'):
+                if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
                 chatgpt_query += f"""\nURL: "{url}" """
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: Using the provided products or Q&A, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\nAlways cite results using [[number](URL)] notation in the sentence's end when using the information from results.\nWrite separate answers for each subject.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         else:
-            chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{self.CONFIG[web_id]['web_name']}"({web_id}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {query}"""
-        message += [{'role': 'user', 'content': chatgpt_query}]
-        return message
+            chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+        gpt_query += [{'role': 'user', 'content': chatgpt_query}]
+        while self.num_tokens_from_messages(gpt_query) > 3800 and len(gpt_query) > 3:
+            gpt_query = [gpt_query[0]] + gpt_query[3:]
+        return gpt_query, linkList
 
-    def replace_answer(self,gpt3_ans):
-        print(f"ChatGPT reply：\t {gpt3_ans}")
-        for url_wrong_fmt, url in re.findall(r'(<(https?:\/\/[\w\.\-\?/=+&#$%^;%_]+)\|.*>)', gpt3_ans):
-            gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-        for url_wrong_fmt, url in re.findall(r'(\[?\d\]?\(?(https?:\/\/[\w\.\-\/\?\=\+\&\#\$\%\^\;\%\_]+)\)?)',
-                                             gpt3_ans):
-            gpt3_ans = gpt3_ans.replace(url_wrong_fmt, url)
-        gpt3_ans = self.translation_stw(gpt3_ans)
-        gpt3_ans = gpt3_ans.replace('，\n', '，')
-        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', gpt3_ans))), key=len, reverse=True)
+class QA_api:
+    def __init__(self, logger, frontend):
+        self.logger = logger
+        self.CONFIG = self.get_config()
+        self.ChatGPT = ChatGPT_AVD()
+        self.search = Search_engine(self.CONFIG)
+        self.frontend = frontend
+        if frontend == 'line':
+            self.table_surffix = '_api'
+            self.url_format = lambda x: ' ' + x + ' '
+        elif frontend == 'slack':
+            self.table_surffix = ''
+            self.url_format = lambda x: '<' + x + '|查看更多>'
+    def get_config(self):
+        '''
+        Returns {web_id: config from jupiter_new -> web_push.AI_service_config}
+        '''
+        config_dict = {}
+        config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config where mode != 0;")
+        config_col = [i[0] for i in
+                      DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
+        for conf in config:
+            config_dict[conf[1]] = {}
+            for k, v in zip(config_col, conf):
+                config_dict[conf[1]][k] = v
+        return config_dict
+
+    def check_message_length(self, message:str, length:int=50):
+        for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
+            if self.fetch_url_response(url):
+                message = message.replace(url, '')
+        return len(message) <= length
+
+    def get_question_keyword(self, message:str, retry:int=3, web_id:str='nineyi000360') -> list:
+        '''
+        :param mode: N => just filter noun
+        --------
+        It will early return when there's only one word after segmentation.
+        It will return one word chosen by chatGPT when there are no words after filtering by chatGPT.
+        '''
+        message = translation_stw(message).lower()
+        for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
+            message = message.replace(i, '')
+            for j in list(jieba.cut(i)):
+                if j in message:
+                    message = message.replace(j, '')
+        stopSwitch, retry, keyword = False, retry, ''
+        forbidden_words = {'client_msg_id', '什麼', '有', '我', '你', '妳', '你們', '妳們', '沒有', '怎麼', '怎', '如何', '要'}
+        not_noun_list = [w for w, p in list(posseg.cut(message)) if 'n' not in p.lower()]
+        while not stopSwitch and retry:
+            keyword = self.ChatGPT.ask_gpt(f"""To "{message}", choose the {min((len(message) + 2) // 3, 3)} most important words that are always used as nouns and cannot exceed 3 Chinese characters, and separate by " ".""",
+                model='gpt-4').replace('\n', '').replace('"', '').replace("。", '')
+            keyword = [i.strip('.') for i in keyword.split(' ') if
+                       not any(re.search(w, i.strip('.')) for w in forbidden_words) and i.strip(
+                           '.') not in not_noun_list and i.strip('.') in message]
+            stopSwitch = len(keyword) > 0
+            retry -= 1
+        if not keyword:
+            keyword = [self.ChatGPT.ask_gpt(f'Choose one important word from "{message}". Just reply the word in 繁體中文.',
+                               model='gpt-4').split(' ')[0].replace('\n', '').replace('"', '').replace("。", '')]
+        return list(map(translation_stw, keyword))
+
+    def reset_result_order(self, result_search, result_recommend, flags, web_id):
+        qa_url = [i.strip('*') for i in self.CONFIG[web_id]['qa_url'].split(',')]
+        result = []
+        if type(result_search) == str:
+            for v in result_search[:5]:
+                if v.get('link') and qa_url in v.get('link'):
+                    result += v
+        if flags.get('is_hot') or type(result_search) == str:
+            result += (result_recommend[:2] + result_search)
+        else:
+            result += (result_recommend[:1] + result_search)
+        return result
+
+    def adjust_ans_url_format(self, answer:str, linkList:list) -> str:
+        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
         for url in url_set:
             reurl = url
             for char in '?':
                 reurl = reurl.replace(char, '\\' + char)
-            gpt3_ans = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', ' ' + url + ' ', gpt3_ans)
+            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
+        for i, url in enumerate(linkList):
+            answer = re.sub(f'\[{i+1}\]', f'[{self.url_format(url)}]', answer)
+        return answer
+
+    def adjust_ans_format(self, answer: str) -> str:
+        if self.frontend == 'line':
+            answer.replace('"', "'")
         replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
         for w in replace_words:
-            gpt3_ans = re.sub(w, '', gpt3_ans).strip('\n')
-        if '親愛的' in gpt3_ans:
-            gpt3_ans = '親愛的' + '親愛的'.join(gpt3_ans.split("親愛的")[1:])
-        if '祝您愉快！' in gpt3_ans:
-            gpt3_ans = '祝您愉快！'.join(gpt3_ans.split("祝您愉快！")[:-1]) + '祝您愉快！'
-        return gpt3_ans
+            answer = re.sub(w, '', answer).strip('\n')
+        if '親愛的' in answer:
+            answer = '親愛的' + '親愛的'.join(answer.split("親愛的")[1:])
+        if '祝您愉快！' in answer:
+            answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
+        return answer
 
-    def gpt_QA(self,web_id, message, group_id):
+    def get_history_df(self, web_id: str, info: str|list) -> pd.DataFrame:
+        if self.frontend == 'line':
+            query = f"""SELECT id, web_id, group_id, counts, question, answer, q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info}' and web_id = '{web_id}';"""
+            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
+                              columns=['id', 'web_id', 'group_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+        if self.frontend == 'slack':
+            query = f"""SELECT id, web_id, user_id, ts, counts, question, answer, q_a_history, add_time FROM web_push.AI_service WHERE ts='{info[1]}';"""
+            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
+                              columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+        return df
+
+    def update_history_df(self, web_id: str, info: str | list, history_df: pd.DataFrame,
+                          message: str, answer: str, keyword: str, response_time: float,
+                          gpt_query: list, gpt_answer: str) -> pd.DataFrame:
+        if len(history_df) == 0:
+            if self.frontend == 'line':
+                history_df = pd.DataFrame([[web_id, info, 0, datetime.now()]],
+                                          columns = ['web_id', 'group_id', 'counts', 'add_time'])
+            elif self.frontend == 'slack':
+                history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
+                                          columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
+
+        history_df['counts'] += 1
+        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
+        _df = history_df.drop(columns=['keyword', 'response_time'])
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_surffix}', is_ssh=False)
+        _df = history_df.drop(columns=['q_a_history'])
+        if 'id' in history_df.columns:
+            _df = _df.drop(columns=['id'])
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_surffix}', is_ssh=False)
+
+
+    def error(self, *arg):
+        self.logger.print(*arg, level="WARNING")
+        return '客服忙碌中，請稍後再試。'
+
+    def QA(self, web_id, message, info):
         start_time = time.time()
-        query = f"""SELECT id, web_id, counts, question, answer, q_a_history,add_time,group_id FROM web_push.AI_service_api WHERE group_id='{group_id}' and web_id = '{web_id}';"""
-        data = DBhelper('jupiter_new').ExecuteSelect(query)
-        QA_report_df = pd.DataFrame(data,columns=['id', 'web_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time','group_id'])
+        if not self.check_message_length(message, 50):
+            self.logger.print('USER ERROR: Input too long!')
+            return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
+        history_df = self.get_history_df(web_id, info)
+
         # Step 1: get keyword from chatGPT
-        keyword_list = self.question_pos_parser(message, 3, web_id)
+        keyword_list = self.get_question_keyword(message, 3, web_id)
         if type(keyword_list) == str:
-            print('keyword_timeout_error')
-            return '客服忙碌中，請稍後再試。'
-        print('關鍵字:\t', keyword_list)
-        # Step 2: get gpt_query with search results from google search engine
-        #try:
-        result, keyword = func_timeout(10, self.likr_search, (keyword_list, web_id))
-            ###推薦引擎 result_recommend, flags = func_timeout(20, engine.likr_recommend_engine, (message, web_id))
-        #except:
-        #    print('keyword_timeout')
-        #    return '客服忙碌中，請稍後再試。'
+            return self.error('keyword_timeout')
+        self.logger.print('關鍵字:\t', keyword_list)
+
+        # Step 2: get gpt_query with search results from google search engine and likr recommend engine
+        try:
+            result, keyword = func_timeout(10, self.search.likr_search, (keyword_list, web_id))
+            self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
+            ##todo 推薦引擎 result_recommend, flags = func_timeout(20, engine.likr_recommend_engine, (message, web_id))
+        except Exception as e:
+            self.logger.print(f'{e.__traceback__}\n ERROR: {e}', level='ERROR')
+            return self.error('search_timeout')
         if result[0].get('URL ERROR'):
-            return "客服忙碌中，請稍後再試。"
-
+            return self.error(str(result))
         if result[0].get('NO RESULTS') and self.CONFIG[web_id]['mode'] == 2:
-            gpt3_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+            gpt_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+
+        # Step 3: response from ChatGPT
         else:
-            # Step 3: response from chatGPT
-            history = None
-            if len(QA_report_df) > 0:
-                history = json.loads(QA_report_df['q_a_history'].iloc[0])
-            ###推薦引擎result = reset_result_order(result, result_recommend, flags, web_id)
-            gpt_query = self.get_gpt_query(result, message, history, web_id)
-            while len(str(gpt_query)) > 3000 and len(gpt_query) > 3:
-                gpt_query = [gpt_query[0]] + gpt_query[3:]
-            print('chatGPT輸入:\t', gpt_query)
+            ##todo 推薦引擎 result = reset_result_order(result, result_recommend, flags, web_id)
+            history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
+            self.logger.print('QA歷史紀錄:\n', history)
 
-            gpt3_answer = self.ask_gpt(gpt_query, timeout=60)
-            if gpt3_answer == 'timeout':
-                print('gpt3_answer_error')
-                return "客服忙碌中，請稍後再試。"
+            gpt_query, linkList = self.ChatGPT.get_gpt_query(result, message, history, self.CONFIG[web_id])
+            self.logger.print('輸入連結:\n', '\n'.join(linkList))
+            self.logger.print('ChatGPT輸入:\t', gpt_query)
 
-            gpt3_answer_slack = self.replace_answer(gpt3_answer)
-            print('cahtGPT輸出:\t', gpt3_answer_slack)
+            gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+            if gpt_answer == 'timeout':
+                return self.error('gpt3_answer_timeout')
+            answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
+            self.logger.print('ChatGPT輸出:\t', answer)
 
-        if history:
-            gpt_query.append({"role": "assistant", "content": f"{gpt3_answer}"})
-            QA_report_df['counts'] += 1
-            QA_report_df[['question', 'answer', 'q_a_history']] = [message, gpt3_answer_slack, json.dumps(gpt_query)]
-        else:
-            gpt3_history = json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt3_answer}"}])
-            QA_report_df = pd.DataFrame([[web_id, group_id, 1, message, gpt3_answer_slack, gpt3_history, datetime.datetime.now()]],columns=['web_id', 'group_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
-        DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service_api', chunk_size=100000,is_ssh=False)
-        QA_report_df = QA_report_df.drop(['q_a_history'], axis=1)
-        if 'id' in QA_report_df.columns:
-            QA_report_df = QA_report_df.drop(['id'], axis=1)
-        QA_report_df['keyword'] = keyword
-        QA_report_df['reponse_time'] = time.time() - start_time
-        # DB_query = DBhelper.generate_update_SQLquery(QA_report_df,'AI_service_cache_api',SQL_ACTION="INSERT INTO")
-        # DBhelper('jupiter_new').ExecuteUpdate(DB_query,QA_report_df.to_dict('records'))
-        DBhelper.ExecuteUpdatebyChunk(QA_report_df, db='jupiter_new', table='AI_service_cache_api', chunk_size=100000,is_ssh=False)
-        return gpt3_answer_slack.replace('"', "'")
-
-
-#########AI_custom
-
+        # Step 4: update database
+        self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
+        return answer
 
 
 
 if __name__ == "__main__":
-    A = AI_customer_service()
-    print(A.gpt_QA('pure17','你們賣什麼','test4466'))
+    logger = logger()
+    # slack
+    AI_customer_service = QA_api(logger, 'slack')
+    print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
+    # line
+    AI_customer_service = QA_api(logger, 'line')
+    print(AI_customer_service.QA('pure17', '有沒有健步機', 'test4466'))
 
 
 
