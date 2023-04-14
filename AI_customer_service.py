@@ -135,10 +135,10 @@ class QA_api:
         self.logger = logger
         self.frontend = frontend
         if frontend == 'line':
-            self.table_surffix = '_api'
+            self.table_suffix = '_api'
             self.url_format = lambda x: ' ' + x + ' '
         elif frontend == 'slack':
-            self.table_surffix = ''
+            self.table_suffix = ''
             self.url_format = lambda x: '<' + x + '|查看更多>'
 
     def get_config(self):
@@ -242,11 +242,11 @@ class QA_api:
         history_df['counts'] += 1
         history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
         _df = history_df.drop(columns=['keyword', 'response_time'])
-        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_surffix}', is_ssh=False)
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_suffix}', is_ssh=False)
         _df = history_df.drop(columns=['q_a_history'])
         if 'id' in history_df.columns:
             _df = _df.drop(columns=['id'])
-        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_surffix}', is_ssh=False)
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
 
 
     def error(self, *arg):
