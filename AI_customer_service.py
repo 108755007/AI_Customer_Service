@@ -12,6 +12,8 @@ from db import DBhelper
 from log import logger
 from AI_customer_service_utils import translation_stw, fetch_url_response
 from likr_Search_engine import Search_engine
+from likr_Recommend_engine import Recommend_engine
+
 
 class ChatGPT_AVD:
     def __init__(self):
@@ -130,6 +132,7 @@ class QA_api:
         self.CONFIG = self.get_config()
         self.ChatGPT = ChatGPT_AVD()
         self.Search = Search_engine()
+        self.Recommend = Recommend_engine()
         self.logger = logger
         self.frontend = frontend
         if frontend == 'line':
@@ -260,18 +263,16 @@ class QA_api:
                                                  model='gpt-4')]
         return keyword_list
 
-    def reset_result_order(self, result_search, result_recommend, flags, web_id):
-        qa_url = [i.strip('*') for i in self.CONFIG[web_id]['qa_url'].split(',')]
-        result = []
-        if type(result_search) == str:
-            for v in result_search[:5]:
-                if v.get('link') and qa_url in v.get('link'):
-                    result += v
-        if flags.get('is_hot') or type(result_search) == str:
-            result += (result_recommend[:2] + result_search)
-        else:
-            result += (result_recommend[:1] + result_search)
-        return result
+    def split_qa_url(self, result, config):
+        qa_domain = [i.strip('*') for i in config['qa_url'].split(',')]
+        qa_url = []
+        n_qa_url = []
+        for r in result:
+            if r.get('link') and any([url in r.get('link') for url in qa_domain]):
+                qa_url.append(r)
+            else:
+                n_qa_url.append(r)
+        return qa_url, n_qa_url
 
     def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
@@ -351,7 +352,10 @@ class QA_api:
         try:
             result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
             self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
-            ##todo 推薦引擎 result_recommend, flags = func_timeout(20, engine.likr_recommend_engine, (message, web_id))
+            qa_result, n_qa_result = self.split_qa_url(result, self.CONFIG[web_id])
+            result = func_timeout(20, Recommend_engine.recommend, (n_qa_result, keyword, flags, self.CONFIG[web_id]))[:3]
+            if flags.get('QA'):
+                result = qa_result[:2] + result
         except Exception as e:
             self.logger.print(f'{e.__traceback__}\n ERROR: {e}', level='ERROR')
             return self.error('search_timeout')
