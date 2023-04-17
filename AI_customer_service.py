@@ -10,7 +10,7 @@ import openai
 import tiktoken
 from db import DBhelper
 from log import logger
-from AI_customer_service_utils import translation_stw
+from AI_customer_service_utils import translation_stw, fetch_url_response
 from likr_Search_engine import Search_engine
 
 class ChatGPT_AVD:
@@ -18,7 +18,7 @@ class ChatGPT_AVD:
         self.OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
 
     def get_keys(func):
-        def inner(self,message, model="gpt-3.5-turbo", timeout=60):
+        def inner(self, message, model="gpt-3.5-turbo", timeout=60):
             # get token_id
             query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
             if 'gpt-4' in model:
@@ -29,7 +29,7 @@ class ChatGPT_AVD:
             DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
             try:
                 res = func_timeout(timeout, func, (self, message, token_id, model))
-            except Exception as e:
+            except:
                 res = 'timeout'
             DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
             return res
@@ -72,7 +72,7 @@ class ChatGPT_AVD:
         num_tokens += 3
         return num_tokens
 
-    def get_gpt_query(self, result, message, history, web_id_conf):
+    def get_gpt_query(self, result: list, message: str, history: list, web_id_conf: dict):
         '''
         :param query: result from likr_search
         :param query: question for chatgpt
@@ -80,13 +80,11 @@ class ChatGPT_AVD:
         chatgpt_query
             Results:
 
-            [1] "result[0]['htmlTitle']}",snippet= "{result[0]['snippet']}",description = "{result[0]['snippet']}"
+            [1] "result[0]['htmlTitle']}",snippet= "{result[0]['snippet']}",description = "{result[0]['pagemap']['metatags'][0]['og:description']"
 
-            [2] "{g[1]['snippet']}"
-            URL: "{g[1]['link']}"
+            [2] "result[1]['htmlTitle']}",snippet= "{result[1]['snippet']}",description = "{result[1]['pagemap']['metatags'][0]['og:description']"
 
-            [3] "{g[2]['snippet']}"
-            URL: "{g[2]['link']}"
+            [3] "result[2]['htmlTitle']}",snippet= "{result[2]['snippet']}",description = "{result[2]['pagemap']['metatags'][0]['og:description']"
 
             Current date: {date}
 
@@ -100,8 +98,8 @@ class ChatGPT_AVD:
         '''
         date = datetime.today().strftime('%Y/%m/%d')
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
+        linkList = []
         if type(result) != str:
-            linkList = []
             chatgpt_query = """\nResults:"""
             for v in result:
                 if not v.get('link') or len(linkList) == 3:
@@ -118,7 +116,6 @@ class ChatGPT_AVD:
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-                chatgpt_query += f"""\nURL: "{url}" """
             chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
@@ -126,6 +123,7 @@ class ChatGPT_AVD:
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
         return gpt_query, linkList
+
 
 class QA_api:
     def __init__(self, frontend, logger):
@@ -155,14 +153,93 @@ class QA_api:
                 config_dict[conf[1]][k] = v
         return config_dict
 
-    def check_message_length(self, message: str, length: int=50):
+    def check_message_length(self, message: str, length: int = 50):
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
-            if self.fetch_url_response(url):
+            if fetch_url_response(url):
                 message = message.replace(url, '')
         return len(message) <= length
 
+    def judge_question_type(self, message: str) -> tuple:
+        flag_dict = {'Product details': 'product',
+                     'Accessories selection': 'product',
+                     'Product comparison': 'product',
+                     'Product guarantee and warranty': 'product',
+                     'Product safety': 'product',
+                     'Product use': 'product',
+                     'Product sourcing': 'product',
+                     'Product maintenance': 'product',
+                     'Product videos/images': 'product',
+                     'Customized products': 'product',
+                     'Product packaging contents': 'product',
+                     'Product use scenarios': 'product',
+                     'Product storage': 'product',
+                     'Inventory status': 'inventory',
+                     'Inventory alert': 'inventory',
+                     'In-store availability': 'inventory',
+                     'Payment methods': 'payment',
+                     'Card payment': 'payment',
+                     'Tax and customs duties': 'payment',
+                     'Shipping fee': 'delivery',
+                     'delivery area': 'delivery',
+                     'Cash on Delivery': 'delivery',
+                     'In-store pickup': 'delivery',
+                     'Membership information': 'member',
+                     'Membership account id or password': 'member',
+                     'Membership system': 'member',
+                     'Membership registration': 'member',
+                     'Membership discounts': 'member',
+                     'Membership activity': 'member',
+                     'Order change': 'order',
+                     'Order cancellation': 'order',
+                     'Order tracking': 'order',
+                     'Check order status': 'order',
+                     'Delivery address': 'order',
+                     'Return policy': 'return/excahnge',
+                     'Refund': 'return/excahnge',
+                     'Product damage': 'return/excahnge',
+                     'Exchange policy': 'return/excahnge',
+                     'Contact customer service': 'Customer service',
+                     'Customer reviews': 'Customer service',
+                     'Customer feedback': 'Customer service',
+                     'Ratings': 'Customer service',
+                     'Popular products': 'hot',
+                     'Hot-selling products': 'hot',
+                     'Discounts': 'promotion',
+                     'Discount amount': 'promotion',
+                     'Promotions': 'promotion',
+                     'Gift cards': 'promotion',
+                     'Coupons': 'promotion',
+                     'Store address': 'store',
+                     'Brand': 'store',
+                     'Business hours': 'store',
+                     'Contact information': 'store',
+                     'Store official site': 'store',
+                     'Social media': 'store',
+                     'Shopping guide': 'store',
+                     'Privacy and security': 'store',
+                     'Search store location': 'store_address',
+                     'Not e-commerce field question': 'others'}
+        flag_list = list(flag_dict.keys())
+        system_query = '\n'.join([f'{i + 1}. {flag}' for i, flag in enumerate(flag_list)])
+        system_query += f"""\nAccording to above classifications, you'll answer what kinds of classifications is user's content. Replay in format as [number1,number2,...] and do not explain."""
+        while True:
+            try:
+                flags_num = eval(self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4', timeout=10))
+                if flags_num == 'timeout':
+                    raise 'timeout'
+                if type(flags_num) == int:
+                    flags = {flag_dict[flag_list[flags_num - 1]]: True}
+                else:
+                    flags = {flag_dict[flag_list[int(i) - 1]]:True for i in flags_num}
+                break
+            except Exception as e:
+                print(e)
+        if not flags.get('product') or not flags.get('others') :
+            flags['QA'] = True
+        return flags
+
     def get_question_keyword(self, message: str, web_id: str) -> list:
-        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有',
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎',
                            '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
         # remove web_id from message
         message = translation_stw(message).lower()
@@ -174,7 +251,8 @@ class QA_api:
         reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,若存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
                                       {'role': 'user', 'content': f'{message}'}],
                                      model='gpt-4')
-        if reply == 'timeout': return 'timeout'
+        if reply == 'timeout':
+            return 'timeout'
         keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
         if not keyword_list:
             keyword_list = [self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content選擇一個最重要的關鍵字。並且只回答此格式 "關鍵字" ,不需要其他解釋'},
@@ -203,7 +281,7 @@ class QA_api:
                 reurl = reurl.replace(char, '\\' + char)
             answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
         for i, url in enumerate(linkList):
-            answer = re.sub(f'\[{i+1}\]', f'[{self.url_format(url)}]', answer)
+            answer = re.sub(f'\[{i + 1}\]', f'[{self.url_format(url)}]', answer)
         return answer
 
     def adjust_ans_format(self, answer: str) -> str:
@@ -218,7 +296,7 @@ class QA_api:
             answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
 
-    def get_history_df(self, web_id: str, info: str|list) -> pd.DataFrame:
+    def get_history_df(self, web_id: str, info: str | list) -> pd.DataFrame:
         if self.frontend == 'line':
             query = f"""SELECT id, web_id, group_id, counts, question, answer, q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info}' and web_id = '{web_id}';"""
             df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
@@ -235,7 +313,7 @@ class QA_api:
         if len(history_df) == 0:
             if self.frontend == 'line':
                 history_df = pd.DataFrame([[web_id, info, 0, datetime.now()]],
-                                          columns = ['web_id', 'group_id', 'counts', 'add_time'])
+                                          columns=['web_id', 'group_id', 'counts', 'add_time'])
             elif self.frontend == 'slack':
                 history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
                                           columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
@@ -248,7 +326,6 @@ class QA_api:
             _df = _df.drop(columns=['id'])
         DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
 
-
     def error(self, *arg):
         self.logger.print(*arg, level="WARNING")
         return '客服忙碌中，請稍後再試。'
@@ -260,6 +337,9 @@ class QA_api:
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
         history_df = self.get_history_df(web_id, info)
+        history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
+        self.logger.print('QA歷史紀錄:\n', history)
+        flags = self.judge_question_type(message)
 
         # Step 1: get keyword from chatGPT
         keyword_list = self.get_question_keyword(message, web_id)
@@ -278,14 +358,10 @@ class QA_api:
         if result[0].get('URL ERROR'):
             return self.error(str(result))
         if result[0].get('NO RESULTS') and self.CONFIG[web_id]['mode'] == 2:
-            gpt_answer = gpt3_answer_slack = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+            gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 
         # Step 3: response from ChatGPT
         else:
-            ##todo 推薦引擎 result = reset_result_order(result, result_recommend, flags, web_id)
-            history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
-            self.logger.print('QA歷史紀錄:\n', history)
-
             gpt_query, linkList = self.ChatGPT.get_gpt_query(result, message, history, self.CONFIG[web_id])
             self.logger.print('輸入連結:\n', '\n'.join(linkList))
             self.logger.print('ChatGPT輸入:\t', gpt_query)
@@ -300,6 +376,7 @@ class QA_api:
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
         return answer
 
+
 if __name__ == "__main__":
     # slack
     AI_customer_service = QA_api('slack', logger())
@@ -307,10 +384,3 @@ if __name__ == "__main__":
     # line
     AI_customer_service = QA_api('line', logger())
     print(AI_customer_service.QA('pure17', '有沒有健步機', 'test4466'))
-
-
-
-
-
-
-
