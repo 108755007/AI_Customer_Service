@@ -231,15 +231,16 @@ class QA_api:
                 if flags_num == 'timeout':
                     raise 'timeout'
                 if type(flags_num) == int:
-                    flags = {flag_dict[flag_list[flags_num - 1]]: True}
+                    flags = [flag_list[flags_num - 1]]
                 else:
-                    flags = {flag_dict[flag_list[int(i) - 1]]:True for i in flags_num}
+                    flags = [flag_list[int(i) - 1] for i in flags_num]
                 break
             except Exception as e:
                 print(e)
-        if not flags.get('product') or not flags.get('others') :
-            flags['QA'] = True
-        return flags
+        flags_class = {flag_dict[f]:True for f in flags}
+        if not flags_class.get('product') and not flags_class.get('others') :
+            flags_class['QA'] = True
+        return flags_class, flags
 
     def get_question_keyword(self, message: str, web_id: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎',
@@ -340,7 +341,8 @@ class QA_api:
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
         self.logger.print('QA歷史紀錄:\n', history)
-        flags = self.judge_question_type(message)
+        flags, f = self.judge_question_type(message)
+        self.logger.print(f'客戶意圖:\t{flags}\n{f}')
 
         # Step 1: get keyword from chatGPT
         keyword_list = self.get_question_keyword(message, web_id)
@@ -354,7 +356,7 @@ class QA_api:
             self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
             qa_result, n_qa_result = self.split_qa_url(result, self.CONFIG[web_id])
             self.logger.print(f'QA_result:\t {[i.get("link") for i in qa_result if i.get("link")], keyword}')
-            recommend_result = func_timeout(20, Recommend_engine.recommend, (n_qa_result, keyword, flags, self.CONFIG[web_id]))[:3]
+            recommend_result = func_timeout(20, self.Recommend.likr_recommend, (n_qa_result, keyword_list, flags, self.CONFIG[web_id]))[:3]
             self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
             recommend_result = qa_result[:2] + recommend_result if flags.get('QA') else recommend_result
         except Exception as e:
