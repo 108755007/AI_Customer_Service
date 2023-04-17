@@ -353,20 +353,19 @@ class QA_api:
             result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
             self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
             qa_result, n_qa_result = self.split_qa_url(result, self.CONFIG[web_id])
-            result = func_timeout(20, Recommend_engine.recommend, (n_qa_result, keyword, flags, self.CONFIG[web_id]))[:3]
-            if flags.get('QA'):
-                result = qa_result[:2] + result
+            self.logger.print(f'QA_result:\t {[i.get("link") for i in qa_result if i.get("link")], keyword}')
+            recommend_result = func_timeout(20, Recommend_engine.recommend, (n_qa_result, keyword, flags, self.CONFIG[web_id]))[:3]
+            self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
+            recommend_result = qa_result[:2] + recommend_result if flags.get('QA') else recommend_result
         except Exception as e:
             self.logger.print(f'{e.__traceback__}\n ERROR: {e}', level='ERROR')
             return self.error('search_timeout')
-        if result[0].get('URL ERROR'):
-            return self.error(str(result))
-        if result[0].get('NO RESULTS') and self.CONFIG[web_id]['mode'] == 2:
+        if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
             gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 
         # Step 3: response from ChatGPT
         else:
-            gpt_query, linkList = self.ChatGPT.get_gpt_query(result, message, history, self.CONFIG[web_id])
+            gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
             self.logger.print('輸入連結:\n', '\n'.join(linkList))
             self.logger.print('ChatGPT輸入:\t', gpt_query)
 
