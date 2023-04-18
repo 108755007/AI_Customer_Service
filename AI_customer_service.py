@@ -260,28 +260,11 @@ class QA_api:
 
     ## QA Flow
     def message_classifier(self, message, web_id):
-        if self.frontend == 'line':
-            # message = json.loads(message)
-            # if message['type'] == 'location':
-            #     if web_id == 'nineyi000360':
-            #         return '', (message['longitude'], message['latitude'])
-            #     else:
-            #         return '', tuple()
-            # if message['type'] == 'text':
-            #     message = message['text']
-            #     message.replace('在哪裡','在哪'). replace('在哪','在哪裡')
-            #     return message, tuple()
-            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
-            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
-                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
-            else:
-                return message, tuple()
-        elif self.frontend == 'slack':
-            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
-            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
-                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
-            else:
-                return message, tuple()
+        message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
+        if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
+            return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
+        else:
+            return message, tuple()
 
     def check_message_length(self, message: str, length: int = 50):
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
@@ -352,18 +335,28 @@ class QA_api:
         flag_list = list(flag_dict.keys())
         system_query = '\n'.join([f'{i + 1}. {flag}' for i, flag in enumerate(flag_list)])
         system_query += f"""\nUsing the classifications outlined above, classify the user's content as accurately as possible using a format of [number1, number2, ...]. Limit your answer to 5 classifications and do not provide any further explanation. Please ensure that your classification accurately reflects the content and captures its nuances."""
-        while True:
+        retry = 5
+        while retry:
             try:
-                flags_num = eval(self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4', timeout=10))
-                if flags_num == 'timeout':
+                print(message)
+                reply = self.ChatGPT.ask_gpt(
+                    [{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4',
+                    timeout=10)
+
+                if reply == 'timeout':
                     raise 'timeout'
-                if type(flags_num) == int or type(flags_num) == float:
-                    flags = [flag_list[int(flags_num) - 1]]
+
+                reply = eval(re.search('\[(\d,? ?)+\]|\d{1,2}\.?', reply).group(0))
+                if type(reply) == int or type(reply) == float:
+                    flags = [flag_list[int(reply) - 1]]
                 else:
-                    flags = [flag_list[int(i) - 1] for i in flags_num]
+                    flags = [flag_list[int(i) - 1] for i in reply]
                 break
             except Exception as e:
                 print(e)
+                retry -= 1
+        if not retry:
+            flags = ['Not e-commerce field question']
         flags_class = {flag_dict[f]: True for f in flags}
         if not flags_class.get('product') and not flags_class.get('others') :
             flags_class['QA'] = True
