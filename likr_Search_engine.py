@@ -36,5 +36,5 @@ class Search_engine():
                                                    f"https://www.googleapis.com/customsearch/v1?cx=46d551baeb2bc4ead&key={self.GOOGLE_SEARCH_KEY}&q={web_id_conf['web_name'].replace(' ', '+')}+", 1)
         if not result:
             print(f"No results: {'+'.join(keyword_list)}")
-            result, result_kw = [{'NO RESULTS': True}], '+'.join(keyword_list)
+            result, result_kw = [], '+'.join(keyword_list)
         return result, result_kw

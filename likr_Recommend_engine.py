@@ -104,13 +104,9 @@ class Recommend_engine:
             sub_domain = re.findall(r'((?:https?://)?(?:[\da-z.-]+)\.(?:[a-z.]{2,6})(?:[\w .-]*)*)/?', sub_domain)[0]
         return sub_domain if sub_domain else None
 
-    def recommend(self, search_result: list[dict], keywords: list, flags: dict, config: dict):
+    def likr_recommend(self, search_result: list[dict], keywords: list, flags: dict, config: dict):
         product_ids = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
         product_result = self.fetch_data(product_ids=product_ids, web_id=config['web_id'])
-
-
-
-        result = []
         if flags.get('product'):
             if flags.get('uuid') and not flags.get('is_hot'):
                 random.shuffle(product_result[:10])
