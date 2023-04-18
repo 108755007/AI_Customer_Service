@@ -1,7 +1,6 @@
-import os
 from dotenv import load_dotenv
 load_dotenv()
-import re, json, time
+import os, traceback, re, json, time
 import pandas as pd
 from datetime import datetime
 from func_timeout import func_timeout
@@ -104,11 +103,10 @@ class ChatGPT_AVD:
         if type(result) != str:
             chatgpt_query = """\nResults:"""
             for v in result:
-                if not v.get('link') or len(linkList) == 3:
+                if not v.get('link'):
                     continue
                 url = v.get('link')
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
-                print('搜尋結果:\t', url)
                 if url in linkList:
                     continue
                 linkList.append(url)
@@ -118,7 +116,8 @@ class ChatGPT_AVD:
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+            # chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions:You are a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the customer query below in 繁體中文. Always start with "親愛的顧客您好," and end with "祝您愉快！". Your response should first address the customer's question using information from the provided results. Then, recommend three products from the provided result, listing with bullet list and using the [number] notation to cite your sources in the end of each subjects. Ensure that your response is comprehensive and helpful.\n\nQuery: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
@@ -237,13 +236,13 @@ class QA_api:
                 break
             except Exception as e:
                 print(e)
-        flags_class = {flag_dict[f]:True for f in flags}
+        flags_class = {flag_dict[f]: True for f in flags}
         if not flags_class.get('product') and not flags_class.get('others') :
             flags_class['QA'] = True
         return flags_class, flags
 
     def get_question_keyword(self, message: str, web_id: str) -> list:
-        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎',
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
                            '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
         # remove web_id from message
         message = translation_stw(message).lower()
@@ -265,15 +264,14 @@ class QA_api:
         return keyword_list
 
     def split_qa_url(self, result, config):
-        qa_domain = [i.strip('*') for i in config['qa_url'].split(',')]
-        qa_url = []
-        n_qa_url = []
+        product_domain = [i.strip('*') for i in config['product_url'].split(',')]
+        n_product_url, product_url = [], []
         for r in result:
-            if r.get('link') and any([url in r.get('link') for url in qa_domain]):
-                qa_url.append(r)
+            if r.get('link') and any([url in r.get('link') for url in product_domain]):
+                product_url.append(r)
             else:
-                n_qa_url.append(r)
-        return qa_url, n_qa_url
+                n_product_url.append(r)
+        return n_product_url, product_url
 
     def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
@@ -360,8 +358,10 @@ class QA_api:
             self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
             recommend_result = qa_result[:2] + recommend_result if flags.get('QA') else recommend_result
         except Exception as e:
-            self.logger.print(f'{e.__traceback__}\n ERROR: {e}', level='ERROR')
-            return self.error('search_timeout')
+            self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
+            return self.error('search_or_recommend_error')
+
+        gpt_query = [{'role': 'user', 'content': message}]
         if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
             gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
 
