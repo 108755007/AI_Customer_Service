@@ -125,7 +125,8 @@ class ChatGPT_AVD:
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
         return gpt_query, linkList
-    def get_gpt_order_query(self,order,message):
+
+    def get_gpt_order_query(self, order, message):
         gpt_query = f"""
         Act as an Order Customer Service Expert in answering questions about product orders and customer inquiries.
         I want you to act as an order customer service expert who is responsible for answering questions about product orders and addressing customer inquiries. You must understand and analyze the order information and come up with appropriate solutions and responses to customer questions. Your replies should be polite, informative, and helpful, focusing only on the issues raised by the customers. The answers must be in the same language as the title (Traditional Chinese) . 
@@ -147,9 +148,11 @@ class QA_api:
         if frontend == 'line':
             self.table_suffix = '_api'
             self.url_format = lambda x: ' ' + x + ' '
+            self.user_id_index = 0
         elif frontend == 'slack':
             self.table_suffix = ''
             self.url_format = lambda x: '<' + x + '|查看更多>'
+            self.user_id_index = 0
 
     def get_config(self):
         '''
@@ -164,6 +167,121 @@ class QA_api:
             for k, v in zip(config_col, conf):
                 config_dict[conf[1]][k] = v
         return config_dict
+
+    ## Search and Recommend
+    def get_question_keyword(self, message: str, web_id: str) -> list:
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
+                           '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
+        # remove web_id from message
+        message = translation_stw(message).lower()
+        for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
+            message = re.sub(i, '', message)
+            for j in list(jieba.cut(i)):
+                message = re.sub(j, '', message)
+        # segmentation
+        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,若存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
+                                      {'role': 'user', 'content': f'{message}'}],
+                                     model='gpt-4')
+        if reply == 'timeout':
+            return 'timeout'
+        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+        if not keyword_list:
+            keyword_list = [self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content選擇一個最重要的關鍵字。並且只回答此格式 "關鍵字" ,不需要其他解釋'},
+                                                  {'role': 'user', 'content': f'{message}'}],
+                                                 model='gpt-4')]
+        return keyword_list
+
+    def split_qa_url(self, result: list[dict], config: dict):
+        product_domain = [i.strip('*') for i in config['product_url'].split(',')]
+        n_product_url, product_url = [], []
+        for r in result:
+            if r.get('link') and any([url in r.get('link') for url in product_domain]):
+                product_url.append(r)
+            else:
+                n_product_url.append(r)
+        return n_product_url, product_url
+
+    def get_history_df(self, web_id: str, info: str | list) -> pd.DataFrame:
+        if self.frontend == 'line':
+            query = f"""SELECT id, web_id, group_id, counts, question, answer, q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info[0]}' and web_id = '{web_id}';"""
+            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
+                              columns=['id', 'web_id', 'group_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+        if self.frontend == 'slack':
+            query = f"""SELECT id, web_id, user_id, ts, counts, question, answer, q_a_history, add_time FROM web_push.AI_service WHERE ts='{info[1]}';"""
+            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
+                              columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+        return df
+
+    def update_history_df(self, web_id: str, info: str | list, history_df: pd.DataFrame,
+                          message: str, answer: str, keyword: str, response_time: float,
+                          gpt_query: list, gpt_answer: str) -> pd.DataFrame:
+        if len(history_df) == 0:
+            if self.frontend == 'line':
+                history_df = pd.DataFrame([[web_id, info[0], 0, datetime.now()]],
+                                          columns=['web_id', 'group_id', 'counts', 'add_time'])
+            elif self.frontend == 'slack':
+                history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
+                                          columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
+        history_df['counts'] += 1
+        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
+        _df = history_df.drop(columns=['keyword', 'response_time'])
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_suffix}', is_ssh=False)
+        _df = history_df.drop(columns=['q_a_history'])
+        if 'id' in history_df.columns:
+            _df = _df.drop(columns=['id'])
+        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
+
+    def error(self, *arg):
+        self.logger.print(*arg, level="WARNING")
+        return '客服忙碌中，請稍後再試。'
+
+    ## lbs
+    def search_nearest_store_nineyi000360(self, gps: tuple, history: list):
+        user_history_message = []
+        for i in history[::-1]:
+            if i.get('role') == 'user' and i.get('content', ''):
+                user_history_message.append(re.search(r'(?<=Query: ).+', i['content']).group(0) if 'Query:' in i['content'] else i['content'])
+        for message in user_history_message*3:
+            flags, _ = self.judge_question_type(message)
+            if flags.get('store_address'):
+                return self.nineyi000360_store_calc.get_nearest_store(gps)
+        return
+
+    ## order system
+    def get_order_type(self, web_id: str, user_id: str, message: str) -> int:
+        query = f"""SELECT web_id, user_id, types, orders, timestamps FROM web_push.AI_service_order_test WHERE user_id = '{user_id}' and web_id = '{web_id}';"""
+        timestamps = int(datetime.timestamp(datetime.now()))
+        df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),columns=['web_id', 'user_id', 'types', 'orders','timestamps'])
+        if len(df) == 0 or timestamps - df['timestamps'].get(0) > 120 or "#回到客服" in message:
+            df.loc[0] = [web_id, user_id, 0, '_', timestamps]
+        df['timestamps'] = timestamps
+        DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
+        return df['types'].get(0), df['orders'].get(0), "#回到客服" in message
+
+    ## QA Flow
+    def message_classifier(self, message, web_id):
+        if self.frontend == 'line':
+            # message = json.loads(message)
+            # if message['type'] == 'location':
+            #     if web_id == 'nineyi000360':
+            #         return '', (message['longitude'], message['latitude'])
+            #     else:
+            #         return '', tuple()
+            # if message['type'] == 'text':
+            #     message = message['text']
+            #     message.replace('在哪裡','在哪'). replace('在哪','在哪裡')
+            #     return message, tuple()
+            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
+            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
+                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
+            else:
+                return message, tuple()
+        elif self.frontend == 'slack':
+            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
+            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
+                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
+            else:
+                return message, tuple()
 
     def check_message_length(self, message: str, length: int = 50):
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
@@ -233,14 +351,14 @@ class QA_api:
                      'Not e-commerce field question': 'others'}
         flag_list = list(flag_dict.keys())
         system_query = '\n'.join([f'{i + 1}. {flag}' for i, flag in enumerate(flag_list)])
-        system_query += f"""\nAccording to above classifications, you'll answer what kinds of classifications is user's content. Replay in format as [number1,number2,...] and do not explain."""
+        system_query += f"""\nUsing the classifications outlined above, classify the user's content as accurately as possible using a format of [number1, number2, ...]. Limit your answer to 5 classifications and do not provide any further explanation. Please ensure that your classification accurately reflects the content and captures its nuances."""
         while True:
             try:
                 flags_num = eval(self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4', timeout=10))
                 if flags_num == 'timeout':
                     raise 'timeout'
-                if type(flags_num) == int:
-                    flags = [flag_list[flags_num - 1]]
+                if type(flags_num) == int or type(flags_num) == float:
+                    flags = [flag_list[int(flags_num) - 1]]
                 else:
                     flags = [flag_list[int(i) - 1] for i in flags_num]
                 break
@@ -251,38 +369,6 @@ class QA_api:
             flags_class['QA'] = True
         return flags_class, flags
 
-    def get_question_keyword(self, message: str, web_id: str) -> list:
-        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
-                           '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
-        # remove web_id from message
-        message = translation_stw(message).lower()
-        for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
-            message = re.sub(i, '', message)
-            for j in list(jieba.cut(i)):
-                message = re.sub(j, '', message)
-        # segmentation
-        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,若存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
-                                      {'role': 'user', 'content': f'{message}'}],
-                                     model='gpt-4')
-        if reply == 'timeout':
-            return 'timeout'
-        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
-        if not keyword_list:
-            keyword_list = [self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content選擇一個最重要的關鍵字。並且只回答此格式 "關鍵字" ,不需要其他解釋'},
-                                                  {'role': 'user', 'content': f'{message}'}],
-                                                 model='gpt-4')]
-        return keyword_list
-
-    def split_qa_url(self, result, config):
-        product_domain = [i.strip('*') for i in config['product_url'].split(',')]
-        n_product_url, product_url = [], []
-        for r in result:
-            if r.get('link') and any([url in r.get('link') for url in product_domain]):
-                product_url.append(r)
-            else:
-                n_product_url.append(r)
-        return n_product_url, product_url
-
     def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
         for url in url_set:
@@ -291,7 +377,8 @@ class QA_api:
                 reurl = reurl.replace(char, '\\' + char)
             answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
         for i, url in enumerate(linkList):
-            answer = re.sub(f'\[{i + 1}\]', f'[{self.url_format(url)}]', answer)
+            answer = re.sub(f'\[#?{i + 1}\]', f'[{self.url_format(url)}]', answer, count=1)
+        answer = re.sub(f'\[#?\d\]', f'[{self.url_format(url)}]', answer, count=1)
         return answer
 
     def adjust_ans_format(self, answer: str) -> str:
@@ -306,86 +393,10 @@ class QA_api:
             answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
 
-    def get_history_df(self, web_id: str, info: str | list) -> pd.DataFrame:
-        if self.frontend == 'line':
-            query = f"""SELECT id, web_id, group_id, counts, question, answer, q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info}' and web_id = '{web_id}';"""
-            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
-                              columns=['id', 'web_id', 'group_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
-        if self.frontend == 'slack':
-            query = f"""SELECT id, web_id, user_id, ts, counts, question, answer, q_a_history, add_time FROM web_push.AI_service WHERE ts='{info[1]}';"""
-            df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
-                              columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
-        return df
-
-    def update_history_df(self, web_id: str, info: str | list, history_df: pd.DataFrame,
-                          message: str, answer: str, keyword: str, response_time: float,
-                          gpt_query: list, gpt_answer: str) -> pd.DataFrame:
-        if len(history_df) == 0:
-            if self.frontend == 'line':
-                history_df = pd.DataFrame([[web_id, info, 0, datetime.now()]],
-                                          columns=['web_id', 'group_id', 'counts', 'add_time'])
-            elif self.frontend == 'slack':
-                history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
-                                          columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
-        history_df['counts'] += 1
-        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
-        _df = history_df.drop(columns=['keyword', 'response_time'])
-        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_suffix}', is_ssh=False)
-        _df = history_df.drop(columns=['q_a_history'])
-        if 'id' in history_df.columns:
-            _df = _df.drop(columns=['id'])
-        DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
-
-    def error(self, *arg):
-        self.logger.print(*arg, level="WARNING")
-        return '客服忙碌中，請稍後再試。'
-
-    def search_nearest_store_nineyi000360(self, gps: tuple, history: list):
-        user_history_message = []
-        for i in history[::-1]:
-            if i.get('role') == 'user' and i.get('content', ''):
-                user_history_message.append(re.search(r'(?<=Query: ).+', i['content']) if 'Query:' in i['content'] else i['content'])
-        for message in user_history_message*3:
-            flags, _ = self.judge_question_type(message)
-            if flags.get('store_address'):
-                return self.nineyi000360_store_calc.get_nearest_store(gps)
-        return
-
-    def message_classifier(self, message, web_id):
-        if self.frontend == 'line':
-            message = json.loads(message)
-            if message['type'] == 'location':
-                if web_id == 'nineyi000360':
-                    return '', (message['longitude'], message['latitude'])
-                else:
-                    return '', tuple()
-            if message['type'] == 'text':
-                message = message['text']
-                message.replace('在哪裡','在哪'). replace('在哪','在哪裡')
-                return message, tuple()
-        elif self.frontend == 'slack':
-            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
-            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
-                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
-            else:
-                return message, tuple()
-
-    def get_order_type(self, web_id: str, info: str | list,message: str) -> int:
-        if self.frontend == 'line':
-            user_id = info
-        elif self.frontend == 'slack':
-            user_id = info[1]
-        query = f"""SELECT web_id, user_id, types, orders, timestamps FROM web_push.AI_service_order_test WHERE user_id = '{user_id}' and web_id = '{web_id}';"""
-        timestamps = int(datetime.timestamp(datetime.now()))
-        df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),columns=['web_id', 'user_id', 'types', 'orders','timestamps'])
-        if len(df) == 0 or timestamps - df['timestamps'].get(0) > 120 or "#回到客服" in message:
-            df.loc[0] = [web_id,user_id,0,'_',timestamps]
-        df['timestamps'] = timestamps
-        DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
-        return df['types'].get(0),df['orders'].get(0),"#回到客服" in message
-
     def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
+        user_id = info[self.user_id_index]
+
         message, gps_location = self.message_classifier(message, web_id)
         if not message and not gps_location:
             return
@@ -395,15 +406,15 @@ class QA_api:
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
 
-        types,orders,reply = self.get_order_type(web_id,info,message)
+        types, orders, reply = self.get_order_type(web_id, user_id, message)
         if reply:
             return "已回到智能客服,謝謝您的詢問"
         if types == 1:
             gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
-            print(gpt_query)
+            self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
             gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+            self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
             return gpt_answer
-
 
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
@@ -415,14 +426,13 @@ class QA_api:
             if store_result:
                 flags['store_address'] = True
                 flags['hot'] = True
-                message = '幫我找最近的全家便利商店。'
+                message = '請提供result的全家便利商店的位置資訊。'
             else:
                 return "親愛的顧客您好，我們不確定您的問題或需求，如果您有任何疑慮或需要任何協助，請隨時聯絡我們的客戶服務團隊。"
 
         if flags.get('order') == True:
-            ####測試用
-            user_id = info if self.frontend == 'line' else info[1]
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id,user_id,1,'訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2',int(datetime.timestamp(datetime.now()))]],columns=['web_id', 'user_id', 'types', 'orders','timestamps']), db='jupiter_new', table='AI_service_order_test', is_ssh=False)
+            ####todo 測試用
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id, user_id, 1, '訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2', int(datetime.timestamp(datetime.now()))]], columns=['web_id', 'user_id', 'types', 'orders', 'timestamps']), db='jupiter_new', table='AI_service_order_test', is_ssh=False)
             ####
             return """你好,如果要詢問訂單,請點此網址登入[ https://www.gaii.ai/product/home/20220317000001/auth/sign_in ],登入成功後會進入詢問訂單模式,如果想退回客服模式請輸入"#回到客服" ,閒置兩分鐘也會自動退回客服模式"""
 
@@ -464,8 +474,9 @@ class QA_api:
             gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
             if gpt_answer == 'timeout':
                 return self.error('gpt3_answer_timeout')
+            self.logger.print('ChatGPT輸出:\t', gpt_answer)
             answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
-            self.logger.print('ChatGPT輸出:\t', answer)
+            self.logger.print('回答:\t', answer)
 
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
