@@ -12,6 +12,7 @@ from log import logger
 from AI_customer_service_utils import translation_stw, fetch_url_response
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
+from distance_calc import StoreDistanceEvaluator
 
 
 class ChatGPT_AVD:
@@ -132,6 +133,7 @@ class QA_api:
         self.ChatGPT = ChatGPT_AVD()
         self.Search = Search_engine()
         self.Recommend = Recommend_engine()
+        self.nineyi000360_store_calc =StoreDistanceEvaluator()
         self.logger = logger
         self.frontend = frontend
         if frontend == 'line':
@@ -330,18 +332,58 @@ class QA_api:
         self.logger.print(*arg, level="WARNING")
         return '客服忙碌中，請稍後再試。'
 
+    def search_nearest_store_nineyi000360(self, gps: tuple, history: list):
+        user_history_message = []
+        for i in history[::-1]:
+            if i.get('role') == 'user' and i.get('content', ''):
+                user_history_message.append(re.search(r'(?<=Query: ).+', i['content']) if 'Query:' in i['content'] else i['content'])
+        for message in user_history_message*3:
+            flags, _ = self.judge_question_type(message)
+            if flags.get('store_address'):
+                return self.nineyi000360_store_calc.get_nearest_store(gps)
+        return
+
+    def message_classifier(self, message, web_id):
+        if self.frontend == 'line':
+            message = json.loads(message)
+            if message['type'] == 'location':
+                if web_id == 'nineyi000360':
+                    return '', (message['longitude'], message['latitude'])
+                else:
+                    return '', tuple()
+            if message['type'] == 'text':
+                message = message['text']
+                message.replace('在哪裡','在哪'). replace('在哪','在哪裡')
+                return message, tuple()
+        elif self.frontend == 'slack':
+            message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
+            if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
+                return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
+            else:
+                return message, tuple()
+
     def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
+        message, gps_location = self.message_classifier(message, web_id)
+        if not message and not gps_location:
+            return
         self.logger.print(f'Get Message:\t{message}')
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
         history_df = self.get_history_df(web_id, info)
-        history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
+        history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
         self.logger.print('QA歷史紀錄:\n', history)
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}')
-
+        if gps_location:
+            store_result = self.search_nearest_store_nineyi000360(gps_location, history)
+            if store_result:
+                flags['store_address'] = True
+                flags['hot'] = True
+                message = '幫我找最近的全家便利商店。'
+            else:
+                return "親愛的顧客您好，我們不確定您的問題或需求，如果您有任何疑慮或需要任何協助，請隨時聯絡我們的客戶服務團隊。"
         # Step 1: get keyword from chatGPT
         keyword_list = self.get_question_keyword(message, web_id)
         if keyword_list == 'timeout':
@@ -350,13 +392,18 @@ class QA_api:
 
         # Step 2: get gpt_query with search results from google search engine and likr recommend engine
         try:
-            result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
-            self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
-            qa_result, n_qa_result = self.split_qa_url(result, self.CONFIG[web_id])
-            self.logger.print(f'QA_result:\t {[i.get("link") for i in qa_result if i.get("link")], keyword}')
-            recommend_result = func_timeout(20, self.Recommend.likr_recommend, (n_qa_result, keyword_list, flags, self.CONFIG[web_id]))[:3]
-            self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
-            recommend_result = qa_result[:2] + recommend_result if flags.get('QA') else recommend_result
+            if gps_location and flags.get('store_address'):
+                result = recommend_result = store_result + self.Recommend.likr_recommend([], '', flags, self.CONFIG[web_id])[:3]
+                keyword = '全家'
+            else:
+                result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
+                self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
+                n_product_result, product_result = self.split_qa_url(result, self.CONFIG[web_id])
+                self.logger.print(f'QA_result:\t {[i.get("link") for i in n_product_result if i.get("link")], keyword}')
+                recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
+                self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
+                if flags.get('QA'):
+                    recommend_result = n_product_result[:2] + recommend_result
         except Exception as e:
             self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
             return self.error('search_or_recommend_error')
@@ -364,7 +411,8 @@ class QA_api:
         gpt_query = [{'role': 'user', 'content': message}]
         if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
             gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
-
+        elif not gps_location and flags.get('store_address') and web_id == 'nineyi000360':
+            gpt_answer = answer = "親愛的顧客您好，若是需要查詢最近的全家便利店位置，請提供我們您現在的位置。"
         # Step 3: response from ChatGPT
         else:
             gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
