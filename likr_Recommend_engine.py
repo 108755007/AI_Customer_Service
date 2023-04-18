@@ -4,6 +4,7 @@ import re
 import numpy as np
 import itertools
 from db import DBhelper
+from urlencode import UrlEncode
 
 
 class Recommend_engine:
@@ -104,30 +105,40 @@ class Recommend_engine:
             sub_domain = re.findall(r'((?:https?://)?(?:[\da-z.-]+)\.(?:[a-z.]{2,6})(?:[\w .-]*)*)/?', sub_domain)[0]
         return sub_domain if sub_domain else None
 
+    def pick_duplicate(self, likr: list[dict], google: list[dict], web_id: str):
+        urlencode = UrlEncode(web_id=web_id)
+        likr_id = {item.get('product_id'): i for i, item in enumerate(likr)}
+        google_id = {urlencode.signature_translate(item.get('link'), web_id=web_id): i for i, item in enumerate(google)}
+        common_id = [id for id in likr_id if id in google_id]
+        likr = [item for i, item in enumerate(likr) if i not in [likr_id[id] for id in common_id]]
+        google = [item for i, item in enumerate(google) if i not in [google_id[id] for id in common_id]]
+        common = [item for i, item in enumerate(likr) if i in [likr_id[id] for id in common_id]]
+        return likr, google, common
+
     def likr_recommend(self, search_result: list[dict], keywords: list, flags: dict, config: dict):
         product_ids = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
         product_result = self.fetch_data(product_ids=product_ids, web_id=config['web_id'])
+        product_result, search_result, common = self.pick_duplicate(likr=product_result[:20], google=search_result, web_id=config['web_id'])
+        result = common if common else []
+
         if flags.get('product'):
             if flags.get('uuid') and not flags.get('is_hot'):
                 random.shuffle(product_result[:10])
-                # product_result = sorted(product_result[:10], key=lambda x: random.random())
-                result = (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
             else:
-                result = (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
         else:
             if flags.get('uuid'):
-                main_product = product_result[0]
-                similar_ids = self.fetch_similarity_data(product_id=main_product['product_id'], web_id=config['web_id'])
+                product_result = [product_result[0]]
+                similar_ids = self.fetch_similarity_data(product_id=product_result[0]['product_id'], web_id=config['web_id'])
                 similarity_products = self.sort_hot_rank(data=similar_ids, web_id=config['web_id'])
                 similarity_products = self.fetch_data(product_ids=similarity_products, web_id=config['web_id'])
                 random.shuffle(similarity_products[:10])
-                product_result = main_product + similarity_products
-                # product_result = [main_product] + sorted(similarity_products[:10], key=lambda x: random.random())
-                result = (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                product_result += similarity_products
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
             else:
                 random.shuffle(product_result[:20])
-                # product_result = sorted(product_result[:20], key=lambda x: random.random())
-                result = (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
         return result
 
 
