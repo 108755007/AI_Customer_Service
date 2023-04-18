@@ -125,7 +125,15 @@ class ChatGPT_AVD:
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
         return gpt_query, linkList
-
+    def get_gpt_order_query(self,order,message):
+        gpt_query = f"""
+        Act as an Order Customer Service Expert in answering questions about product orders and customer inquiries.
+        I want you to act as an order customer service expert who is responsible for answering questions about product orders and addressing customer inquiries. You must understand and analyze the order information and come up with appropriate solutions and responses to customer questions. Your replies should be polite, informative, and helpful, focusing only on the issues raised by the customers. The answers must be in the same language as the title (Traditional Chinese) . 
+        My first order information is :{order}
+        My first customer question is '{message}'.
+        Only reply in 繁體中文 and "感謝您選擇我們的產品，祝您生活愉快！" in the end.
+        """
+        return gpt_query
 
 class QA_api:
     def __init__(self, frontend, logger):
@@ -332,17 +340,54 @@ class QA_api:
         self.logger.print(*arg, level="WARNING")
         return '客服忙碌中，請稍後再試。'
 
+
+    def get_order_type(self, web_id: str, info: str | list,message: str) -> int:
+        if self.frontend == 'line':
+            user_id = info
+        elif self.frontend == 'slack':
+            user_id = info[1]
+        query = f"""SELECT web_id, user_id, types, orders, timestamps FROM web_push.AI_service_order_test WHERE user_id = '{user_id}' and web_id = '{web_id}';"""
+        timestamps = int(datetime.timestamp(datetime.now()))
+        df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),columns=['web_id', 'user_id', 'types', 'orders','timestamps'])
+        if len(df) == 0 or timestamps - df['timestamps'].get(0) > 120 or "#回到客服" in message:
+            df.loc[0] = [web_id,user_id,0,'_',timestamps]
+        df['timestamps'] = timestamps
+        DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
+        return df['types'].get(0),df['orders'].get(0),"#回到客服" in message
+
+
+
     def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
         self.logger.print(f'Get Message:\t{message}')
+
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
+
+        types,orders,reply = self.get_order_type(web_id,info,message)
+        if reply:
+            return "已回到智能客服,謝謝您的詢問"
+        if types == 1:
+            gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
+            print(gpt_query)
+            gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+            return gpt_answer
+
+
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else None
         self.logger.print('QA歷史紀錄:\n', history)
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}')
+
+        if flags.get('order') == True:
+            ####測試用
+            user_id = info if self.frontend == 'line' else info[1]
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id,user_id,1,'訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2',int(datetime.timestamp(datetime.now()))]],columns=['web_id', 'user_id', 'types', 'orders','timestamps']), db='jupiter_new', table='AI_service_order_test', is_ssh=False)
+            ####
+            return """你好,如果要詢問訂單,請點此網址登入[ https://www.gaii.ai/product/home/20220317000001/auth/sign_in ],登入成功後會進入詢問訂單模式,如果想退回客服模式請輸入"#回到客服" ,閒置兩分鐘也會自動退回客服模式"""
+
 
         # Step 1: get keyword from chatGPT
         keyword_list = self.get_question_keyword(message, web_id)
@@ -384,8 +429,8 @@ class QA_api:
 
 if __name__ == "__main__":
     # slack
-    AI_customer_service = QA_api('slack', logger())
-    print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
+    #AI_customer_service = QA_api('slack', logger())
+    #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('pure17', '有沒有健步機', 'test4466'))
+    print(AI_customer_service.QA('pure17', '我想詢問訂單', 'test4466'))
