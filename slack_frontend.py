@@ -63,7 +63,9 @@ def show_bert_qa(message, body, say):
 
 	web_id = check_web_id(text)
 	say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
-	say(text=AI_customer_service.QA(web_id, text, [user_id, thread_ts]), channel=dm_channel, thread_ts=ts)
+	say(text=AI_customer_service.QA(web_id, text, [user_id, thread_ts]),
+		channel=dm_channel, thread_ts=ts,
+		unfurl_links=False, unfurl_media=False)
 	return
 
 @app.event("message")
