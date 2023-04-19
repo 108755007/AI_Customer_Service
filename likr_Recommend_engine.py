@@ -118,15 +118,15 @@ class Recommend_engine:
     def likr_recommend(self, search_result: list[dict], keywords: list, flags: dict, config: dict):
         product_ids = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
         product_result = self.fetch_data(product_ids=product_ids, web_id=config['web_id'])
-        product_result, search_result, common = self.pick_duplicate(likr=product_result[:20], google=search_result, web_id=config['web_id'])
+        product_result, search_result, common = self.pick_duplicate(likr=product_result[:30], google=search_result, web_id=config['web_id'])
         result = common if common else []
 
         if flags.get('product'):
             if flags.get('uuid') and not flags.get('is_hot'):
                 random.shuffle(product_result[:10])
-                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
             else:
-                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
         else:
             if flags.get('uuid'):
                 product_result = [product_result[0]]
@@ -135,10 +135,10 @@ class Recommend_engine:
                 similarity_products = self.fetch_data(product_ids=similarity_products, web_id=config['web_id'])
                 random.shuffle(similarity_products[:10])
                 product_result += similarity_products
-                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
             else:
                 random.shuffle(product_result[:20])
-                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:])
+                result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
         return result
 
 

@@ -118,7 +118,7 @@ class ChatGPT_AVD:
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
             # chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions:You are a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the customer query below in 繁體中文. Always start with "親愛的顧客您好," and end with "祝您愉快！". Your response should first address the customer's question using information from the provided results. Then, recommend three products from the provided result, listing with bullet list and using the [number] notation to cite your sources in the end of each subjects. Ensure that your response is comprehensive and helpful.\n\nQuery: {message}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好," and end with "祝您愉快！". Your should first address the customer's question using information from the provided results. Then, recommend three products from the provided results, using bullet points and the [number] notation to cite your sources at the end of each product. Ensure that your response is comprehensive ,helpful and information is generated entirely from the search results provided.'.\n\nQuery: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
@@ -231,10 +231,6 @@ class QA_api:
             _df = _df.drop(columns=['id'])
         DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
 
-    def error(self, *arg):
-        self.logger.print(*arg, level="WARNING")
-        return '客服忙碌中，請稍後再試。'
-
     ## lbs
     def search_nearest_store_nineyi000360(self, gps: tuple, history: list):
         user_history_message = []
@@ -260,7 +256,7 @@ class QA_api:
 
     ## QA Flow
     def message_classifier(self, message, web_id):
-        message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
+        message = message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
         if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
             return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
         else:
@@ -334,24 +330,16 @@ class QA_api:
                      'Not e-commerce field question': 'others'}
         flag_list = list(flag_dict.keys())
         system_query = '\n'.join([f'{i + 1}. {flag}' for i, flag in enumerate(flag_list)])
-        system_query += f"""\nUsing the classifications outlined above, classify the user's content as accurately as possible using a format of [number1, number2, ...]. Limit your answer to 5 classifications and do not provide any further explanation. Please ensure that your classification accurately reflects the content and captures its nuances."""
-        retry = 5
+        system_query += f"""\nUsing the classifications outlined above, classify the user's content as accurately. Please format your response as a series of numbers [e.g. 1, 2, 3...].Please ensure that your classification accurately reflects the content and captures its nuances."""
+        retry = 3
         while retry:
             try:
-                print(message)
-                reply = self.ChatGPT.ask_gpt(
-                    [{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4',
-                    timeout=10)
-
+                reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4', timeout=10)
                 if reply == 'timeout':
                     raise 'timeout'
-
-                reply = eval(re.search('\[(\d,? ?)+\]|\d{1,2}\.?', reply).group(0))
-                if type(reply) == int or type(reply) == float:
-                    flags = [flag_list[int(reply) - 1]]
-                else:
-                    flags = [flag_list[int(i) - 1] for i in reply]
-                break
+                flags = [flag_list[int(i) - 1] for i in re.findall(r'\d+',reply)]
+                if flags:
+                    break
             except Exception as e:
                 print(e)
                 retry -= 1
@@ -370,8 +358,8 @@ class QA_api:
                 reurl = reurl.replace(char, '\\' + char)
             answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
         for i, url in enumerate(linkList):
-            answer = re.sub(f'\[#?{i + 1}\]', f'[{self.url_format(url)}]', answer, count=1)
-        answer = re.sub(f'\[#?\d\]', f'[{self.url_format(url)}]', answer, count=1)
+            answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(url)}]', answer, count=1)
+        answer = re.sub(f'\[#?\d\]', f'', answer)
         return answer
 
     def adjust_ans_format(self, answer: str) -> str:
@@ -385,6 +373,10 @@ class QA_api:
         if '祝您愉快！' in answer:
             answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
+
+    def error(self, *arg):
+        self.logger.print(*arg, level="WARNING")
+        return '客服忙碌中，請稍後再試。'
 
     def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
