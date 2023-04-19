@@ -102,7 +102,7 @@ class ChatGPT_AVD:
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         linkList = []
         if type(result) != str:
-            chatgpt_query = """\nResults:"""
+            chatgpt_query = """\nInformation:"""
             for v in result:
                 if not v.get('link'):
                     continue
@@ -118,7 +118,7 @@ class ChatGPT_AVD:
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
             # chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好," and end with "祝您愉快！". Your should first address the customer's question using information from the provided results. Then, recommend three products from the provided results, using bullet points and the [number] notation to cite your sources at the end of each product. Ensure that your response is comprehensive ,helpful and information is generated entirely from the search results provided.'.\n\nQuery: {message}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your should first address the customer's question. Then, recommend three products by using bullet points. Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Use the [number] notation to cite your sources after each sentence.\n\nCustomer's Query: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
@@ -171,7 +171,8 @@ class QA_api:
     ## Search and Recommend
     def get_question_keyword(self, message: str, web_id: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
-                           '^如何$', '^賣$', '^有$', '^可以$', '暢銷', '^商品$', '熱賣', '特別', '最近', '幾天', '常常'}
+                           '^如何$', '^賣$', '^有$', '^可以$', '^商品$', '^哪', '哪$'
+                           '暢銷', '熱賣', '特別', '最近', '幾天', '常常'}
         # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
@@ -223,7 +224,8 @@ class QA_api:
                 history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
                                           columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
         history_df['counts'] += 1
-        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query + [{"role": "assistant", "content": f"{gpt_answer}"}])]
+        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query[:-1] + [{"role": "assistant", "content": f"{gpt_answer}"}])]
+        history_df['q_a_history'] =  json.dumps(gpt_query[:-1] + [{"role": "user", "content": f"{message}"}, {"role": "assistant", "content": f"{gpt_answer}"}])
         _df = history_df.drop(columns=['keyword', 'response_time'])
         DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_suffix}', is_ssh=False)
         _df = history_df.drop(columns=['q_a_history'])
@@ -237,7 +239,7 @@ class QA_api:
         for i in history[::-1]:
             if i.get('role') == 'user' and i.get('content', ''):
                 user_history_message.append(re.search(r'(?<=Query: ).+', i['content']).group(0) if 'Query:' in i['content'] else i['content'])
-        for message in user_history_message*3:
+        for message in user_history_message * 3:
             flags, _ = self.judge_question_type(message)
             if flags.get('store_address'):
                 return self.nineyi000360_store_calc.get_nearest_store(gps)
@@ -282,9 +284,10 @@ class QA_api:
                      'Product packaging contents': 'product',
                      'Product use scenarios': 'product',
                      'Product storage': 'product',
-                     'Inventory status': 'inventory',
-                     'Inventory alert': 'inventory',
-                     'In-store availability': 'inventory',
+                     'Product purchase': 'purchase',
+                     'Inventory status': 'purchase',
+                     'Inventory alert': 'purchase',
+                     'In-store availability': 'purchase',
                      'Payment methods': 'payment',
                      'Card payment': 'payment',
                      'Tax and customs duties': 'payment',
@@ -303,10 +306,10 @@ class QA_api:
                      'Order tracking': 'order',
                      'Check order status': 'order',
                      'Delivery address': 'order',
-                     'Return policy': 'return/excahnge',
-                     'Refund': 'return/excahnge',
-                     'Product damage': 'return/excahnge',
-                     'Exchange policy': 'return/excahnge',
+                     'Return policy': 'return/exchange',
+                     'Refund': 'return/exchange',
+                     'Product damage': 'return/exchange',
+                     'Exchange policy': 'return/exchange',
                      'Contact customer service': 'Customer service',
                      'Customer reviews': 'Customer service',
                      'Customer feedback': 'Customer service',
@@ -327,6 +330,7 @@ class QA_api:
                      'Shopping guide': 'store',
                      'Privacy and security': 'store',
                      'Search store location': 'store_address',
+                     'gps location': 'gps',
                      'Not e-commerce field question': 'others'}
         flag_list = list(flag_dict.keys())
         system_query = '\n'.join([f'{i + 1}. {flag}' for i, flag in enumerate(flag_list)])
@@ -336,17 +340,19 @@ class QA_api:
             try:
                 reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content': message}], model='gpt-4', timeout=10)
                 if reply == 'timeout':
-                    raise 'timeout'
+                    raise Exception
                 flags = [flag_list[int(i) - 1] for i in re.findall(r'\d+',reply)]
+                if flags == ['Not e-commerce field question']:
+                    raise Exception
                 if flags:
                     break
             except Exception as e:
-                print(e)
+                print('retry judge')
                 retry -= 1
         if not retry:
             flags = ['Not e-commerce field question']
         flags_class = {flag_dict[f]: True for f in flags}
-        if not flags_class.get('product') and not flags_class.get('others') :
+        if not flags_class.get('product') and not flags_class.get('others'):
             flags_class['QA'] = True
         return flags_class, flags
 
@@ -362,7 +368,7 @@ class QA_api:
         answer = re.sub(f'\[#?\d\]', f'', answer)
         return answer
 
-    def adjust_ans_format(self, answer: str) -> str:
+    def adjust_ans_format(self, answer: str, ) -> str:
         if self.frontend == 'line':
             answer.replace('"', "'")
         replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
@@ -398,6 +404,8 @@ class QA_api:
             gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
             self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
             gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+            if '生活愉快！' in gpt_answer:
+                gpt_answer = '生活愉快！'.join(gpt_answer.split("生活愉快！")[:-1]) + '生活愉快！'
             self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
             return gpt_answer
 
@@ -420,48 +428,63 @@ class QA_api:
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id, user_id, 1, '訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2', int(datetime.timestamp(datetime.now()))]], columns=['web_id', 'user_id', 'types', 'orders', 'timestamps']), db='jupiter_new', table='AI_service_order_test', is_ssh=False)
             ####
             return """你好,如果要詢問訂單,請點此網址登入[ https://www.gaii.ai/product/home/20220317000001/auth/sign_in ],登入成功後會進入詢問訂單模式,如果想退回客服模式請輸入"#回到客服" ,閒置兩分鐘也會自動退回客服模式"""
-
-        # Step 1: get keyword from chatGPT
-        keyword_list = self.get_question_keyword(message, web_id)
-        if keyword_list == 'timeout':
-            return self.error('keyword_timeout')
-        self.logger.print('關鍵字:\t', keyword_list)
-
-        # Step 2: get gpt_query with search results from google search engine and likr recommend engine
-        try:
-            if gps_location and flags.get('store_address'):
-                result = recommend_result = store_result + self.Recommend.likr_recommend([], '', flags, self.CONFIG[web_id])[:3]
-                keyword = '全家'
+        if gps_location:
+            store_result = self.search_nearest_store_nineyi000360(gps_location, history)
+            if store_result:
+                flags['store_address'] = True
+                flags['hot'] = True
+                message = '給我全家便利商店的位置資訊。'
             else:
-                result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
-                self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
-                n_product_result, product_result = self.split_qa_url(result, self.CONFIG[web_id])
-                self.logger.print(f'QA_result:\t {[i.get("link") for i in n_product_result if i.get("link")], keyword}')
-                recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
-                self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
-                if flags.get('QA'):
-                    recommend_result = n_product_result[:2] + recommend_result
-        except Exception as e:
-            self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
-            return self.error('search_or_recommend_error')
-
-        gpt_query = [{'role': 'user', 'content': message}]
-        if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
-            gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
-        elif not gps_location and flags.get('store_address') and web_id == 'nineyi000360':
+                return "親愛的顧客您好，我們不確定您的問題或需求，如果您有任何疑慮或需要任何協助，請隨時聯絡我們的客戶服務團隊。"
+        if not gps_location and flags.get('store_address') and web_id == 'nineyi000360':
+            keyword = ''
+            gpt_query = [{'role': 'user', 'content': message}]
             gpt_answer = answer = "親愛的顧客您好，若是需要查詢最近的全家便利店位置，請提供我們您現在的位置。"
-        # Step 3: response from ChatGPT
         else:
-            gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
-            self.logger.print('輸入連結:\n', '\n'.join(linkList))
-            self.logger.print('ChatGPT輸入:\t', gpt_query)
+            # Step 1: get keyword from chatGPT
+            keyword_list = self.get_question_keyword(message, web_id)
+            if keyword_list == 'timeout':
+                return self.error('keyword_timeout')
+            self.logger.print('關鍵字:\t', keyword_list)
 
-            gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
-            if gpt_answer == 'timeout':
-                return self.error('gpt3_answer_timeout')
-            self.logger.print('ChatGPT輸出:\t', gpt_answer)
-            answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
-            self.logger.print('回答:\t', answer)
+            # Step 2: get gpt_query with search results from google search engine and likr recommend engine
+            try:
+                if gps_location and flags.get('store_address'):
+                    result = recommend_result = store_result + self.Recommend.likr_recommend([], '', flags, self.CONFIG[web_id])[:3]
+                    keyword = '全家'
+                else:
+                    result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
+                    self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
+                    n_product_result, product_result = self.split_qa_url(result, self.CONFIG[web_id])
+                    self.logger.print(f'QA_result:\t {[i.get("link") for i in n_product_result if i.get("link")], keyword}')
+                    if web_id == 'avividai':
+                        recommend_result = result[:3]
+                    else:
+                        recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
+                    self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
+                    if flags.get('QA'):
+                        recommend_result = n_product_result[:2] + recommend_result
+            except Exception as e:
+                self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
+                return self.error('search_or_recommend_error')
+
+            if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
+                gpt_query = [{'role': 'user', 'content': message}]
+                gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
+            # Step 3: response from ChatGPT
+            else:
+                gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
+                self.logger.print('輸入連結:\n', '\n'.join(linkList))
+                self.logger.print('ChatGPT輸入:\t', gpt_query)
+
+                gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+                if gpt_answer == 'timeout':
+                    return self.error('gpt3_answer_timeout')
+                self.logger.print('ChatGPT輸出:\t', gpt_answer)
+                answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
+                if web_id == 'avividai' and history == []:
+                    answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
+                self.logger.print('回答:\t', answer)
 
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)

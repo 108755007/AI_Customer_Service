@@ -120,12 +120,14 @@ class Recommend_engine:
         product_result = self.fetch_data(product_ids=product_ids, web_id=config['web_id'])
         product_result, search_result, common = self.pick_duplicate(likr=product_result[:30], google=search_result, web_id=config['web_id'])
         result = common if common else []
-
         if flags.get('product'):
             if flags.get('uuid') and not flags.get('is_hot'):
-                random.shuffle(product_result[:10])
+                product_result = product_result[:10]
+                random.shuffle(product_result)
                 result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
             else:
+                product_result = product_result[:20]
+                random.shuffle(product_result)
                 result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
         else:
             if flags.get('uuid'):
@@ -133,11 +135,13 @@ class Recommend_engine:
                 similar_ids = self.fetch_similarity_data(product_id=product_result[0]['product_id'], web_id=config['web_id'])
                 similarity_products = self.sort_hot_rank(data=similar_ids, web_id=config['web_id'])
                 similarity_products = self.fetch_data(product_ids=similarity_products, web_id=config['web_id'])
-                random.shuffle(similarity_products[:10])
+                similarity_products = similarity_products[:10]
+                random.shuffle(similarity_products)
                 product_result += similarity_products
                 result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
             else:
-                random.shuffle(product_result[:20])
+                product_result = product_result[:20]
+                random.shuffle(product_result)
                 result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
         return result
 
