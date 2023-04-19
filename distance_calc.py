@@ -28,7 +28,7 @@ class StoreDistanceEvaluator:
         calc_df = calc_df[calc_df['距離'] == calc_df['距離'].min()]
         min_dis_store = calc_df['店名'].values[0]
 
-        res = [{"htmlTitle": min_dis_store,
+        res = [{"htmlTitle": '全家便利商店-'+min_dis_store,
               "pagemap": {"metatags": [{"og:description": calc_df['地址'].values[0]}]},
               "link": GOOGLE_MAP_FORMAT + min_dis_store}]
         return res
