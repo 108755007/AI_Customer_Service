@@ -262,11 +262,11 @@ class QA_api:
         query = f"""SELECT web_id, user_id, types, orders, timestamps FROM web_push.AI_service_order_test WHERE user_id = '{user_id}' and web_id = '{web_id}';"""
         timestamps = int(datetime.timestamp(datetime.now()))
         df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),columns=['web_id', 'user_id', 'types', 'orders','timestamps'])
-        if len(df) == 0 or timestamps - df['timestamps'].get(0) > 120 or "#回到客服" in message:
-            df.loc[0] = [web_id, user_id, 0, '_', timestamps]
+        if len(df) == 0:
+            df.loc[0] = [web_id, user_id, 1, '訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2', timestamps]
         df['timestamps'] = timestamps
         DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
-        return df['types'].get(0), df['orders'].get(0), "#回到客服" in message
+        return df['types'].get(0), df['orders'].get(0)
 
     ## QA Flow
     def message_classifier(self, message, web_id):
@@ -391,6 +391,23 @@ class QA_api:
         if '祝您愉快！' in answer:
             answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
+    def answer_append(self,answer,flags):
+        kind_dict = {'delivery':'到貨','purchase':'購買','payment':'付款','return/exchange':'退換貨','order':'訂單'}
+        add = f"\n\n如果想知道更詳細的"
+        if flags.get('order') == True:
+            add += f"{kind_dict['order']}"
+        elif flags.get('purchase') == True:
+            add += f"{kind_dict['purchase']}"
+        elif flags.get('return/exchange') == True:
+            add += f"{kind_dict['return/exchange']}"
+        elif flags.get('payment') == True:
+            add += f"{kind_dict['payment']}"
+        elif flags.get('delivery') == True:
+            add += f"{kind_dict['delivery']}"
+        else:
+            return answer
+        add += "資訊, 請登入此網址查詢[https: // www.gaii.ai / product / home / 20220317000001 / auth / sign_in]"
+        return answer + add
 
     def error(self, *arg):
         self.logger.print(*arg, level="WARNING")
@@ -409,17 +426,9 @@ class QA_api:
             self.logger.print('USER ERROR: Input too long!')
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
 
-        types, orders, reply = self.get_order_type(web_id, user_id, message)
-        if reply:
-            return "已回到智能客服,謝謝您的詢問"
-        if types == 1:
-            gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
-            self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
-            gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
-            if '生活愉快！' in gpt_answer:
-                gpt_answer = '生活愉快！'.join(gpt_answer.split("生活愉快！")[:-1]) + '生活愉快！'
-            self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
-            return gpt_answer
+        #types, orders = self.get_order_type(web_id, user_id, message)
+      
+
 
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
@@ -427,12 +436,6 @@ class QA_api:
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}')
 
-
-        if flags.get('order') == True:
-            ####todo 測試用
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id, user_id, 1, '訂單編號:202300413041,購入日期:2023/04/13,總計:5274,訂單狀況:付款完畢,商品1:JC22S-C,商品1數量:1 ,商品2:Luxe-c22,商品2數量:2', int(datetime.timestamp(datetime.now()))]], columns=['web_id', 'user_id', 'types', 'orders', 'timestamps']), db='jupiter_new', table='AI_service_order_test', is_ssh=False)
-            ####
-            return """你好,如果要詢問訂單,請點此網址登入[ https://www.gaii.ai/product/home/20220317000001/auth/sign_in ],登入成功後會進入詢問訂單模式,如果想退回客服模式請輸入"#回到客服" ,閒置兩分鐘也會自動退回客服模式"""
         if gps_location:
             store_result = self.search_nearest_store_nineyi000360(gps_location, history)
             if store_result:
@@ -441,7 +444,18 @@ class QA_api:
                 message = '給我全家便利商店的位置資訊。'
             else:
                 return "親愛的顧客您好，我們不確定您的問題或需求，如果您有任何疑慮或需要任何協助，請隨時聯絡我們的客戶服務團隊。"
+                
+        # if types == 1:
+        #     gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
+        #     self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
+        #     gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+        #     if '生活愉快！' in gpt_answer:
+        #         gpt_answer = '生活愉快！'.join(gpt_answer.split("生活愉快！")[:-1]) + '生活愉快！'
+        #     self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
+        #     return gpt_answer
+        
         if not gps_location and flags.get('store_address') and web_id == 'nineyi000360':
+     
             keyword = ''
             gpt_query = [{'role': 'user', 'content': message}]
             gpt_answer = answer = "親愛的顧客您好，若是需要查詢最近的全家便利店位置，請提供我們您現在的位置。"
@@ -489,10 +503,12 @@ class QA_api:
                 answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
                 if web_id == 'avividai' and history == []:
                     answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
+                answer = self.answer_append(answer,flags)
                 self.logger.print('回答:\t', answer)
 
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
+
         return answer
 
 
