@@ -47,7 +47,7 @@ class ChatGPT_AVD:
         return inner
 
     @get_keys
-    def ask_gpt(self, message, config):
+    def ask_gpt(self, message: str, config: dict) -> str:
         openai.api_key = config.get('api_key')
         openai.api_type = config.get('api_type')
         openai.api_base = config.get('api_base')
@@ -57,7 +57,7 @@ class ChatGPT_AVD:
         completion = openai.ChatCompletion.create(**kwargs)
         return completion['choices'][0]['message']['content']
 
-    def num_tokens_from_messages(self, messages, model="gpt-3.5-turbo"):
+    def num_tokens_from_messages(self, messages: str, model: str = "gpt-3.5-turbo") -> int:
         """Returns the number of tokens used by a list of messages."""
         try:
             encoding = tiktoken.encoding_for_model(model)
@@ -129,8 +129,7 @@ class ChatGPT_AVD:
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-            # chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are "{web_id_conf['web_name']}" customer service. Using the information of results or following the flow of conversation, write a comprehensive reply to the given query in 繁體中文 and following the rules below:\nAlways cite the information from the provided results using the [number] notation in the end of that sentence.\nWrite Bullet list for each subject if you recommend products.\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your should first address the customer's question. Then, recommend three products by using bullet points. Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Use the [number] notation to cite your sources at the end of each sentence.\n\nCustomer's Query: {message}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Your should first address the customer's question. Then, recommend three products from the information provided by using bullet points.  Use the [number] notation to cite your sources after every subject of recommend products.\n\nCustomer's Query: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
@@ -138,7 +137,7 @@ class ChatGPT_AVD:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
         return gpt_query, linkList
 
-    def get_gpt_order_query(self, order, message):
+    def get_gpt_order_query(self, order: str, message: str):
         gpt_query = f"""
         Act as an Order Customer Service Expert in answering questions about product orders and customer inquiries.
         I want you to act as an order customer service expert who is responsible for answering questions about product orders and addressing customer inquiries. You must understand and analyze the order information and come up with appropriate solutions and responses to customer questions. Your replies should be polite, informative, and helpful, focusing only on the issues raised by the customers. The answers must be in the same language as the title (Traditional Chinese) . 
@@ -172,8 +171,7 @@ class QA_api:
         '''
         config_dict = {}
         config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config where mode != 0;")
-        config_col = [i[0] for i in
-                      DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
+        config_col = [i[0] for i in DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
         for conf in config:
             config_dict[conf[1]] = {}
             for k, v in zip(config_col, conf):
@@ -258,7 +256,7 @@ class QA_api:
         return
 
     ## order system
-    def get_order_type(self, web_id: str, user_id: str, message: str) -> int:
+    def get_order_type(self, web_id: str, user_id: str) -> int:
         query = f"""SELECT web_id, user_id, types, orders, timestamps FROM web_push.AI_service_order_test WHERE user_id = '{user_id}' and web_id = '{web_id}';"""
         timestamps = int(datetime.timestamp(datetime.now()))
         df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),columns=['web_id', 'user_id', 'types', 'orders','timestamps'])
@@ -268,15 +266,33 @@ class QA_api:
         DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
         return df['types'].get(0), df['orders'].get(0)
 
+    def answer_append(self, answer: str, flags: dict) -> str:
+        kind_dict = {'delivery': '到貨', 'purchase': '購買', 'payment': '付款', 'return/exchange': '退換貨', 'order': '訂單'}
+        add = f"\n\n想知道更詳細的"
+        if flags.get('order'):
+            add += f"{kind_dict['order']}"
+        elif flags.get('purchase'):
+            add += f"{kind_dict['purchase']}"
+        elif flags.get('return/exchange'):
+            add += f"{kind_dict['return/exchange']}"
+        elif flags.get('payment'):
+            add += f"{kind_dict['payment']}"
+        elif flags.get('delivery'):
+            add += f"{kind_dict['delivery']}"
+        else:
+            return answer
+        add += "資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+        return answer + add
+
     ## QA Flow
-    def message_classifier(self, message, web_id):
+    def message_classifier(self, message: str, web_id: str):
         message = message.replace('在哪裡', '在哪').replace('在哪', '在哪裡')
         if re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message) and web_id == 'nineyi000360':
             return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
         else:
             return message, tuple()
 
-    def check_message_length(self, message: str, length: int = 50):
+    def check_message_length(self, message: str, length: int = 50) -> bool:
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
             if fetch_url_response(url):
                 message = message.replace(url, '')
@@ -391,23 +407,6 @@ class QA_api:
         if '祝您愉快！' in answer:
             answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
-    def answer_append(self,answer,flags):
-        kind_dict = {'delivery':'到貨','purchase':'購買','payment':'付款','return/exchange':'退換貨','order':'訂單'}
-        add = f"\n\n如果想知道更詳細的"
-        if flags.get('order') == True:
-            add += f"{kind_dict['order']}"
-        elif flags.get('purchase') == True:
-            add += f"{kind_dict['purchase']}"
-        elif flags.get('return/exchange') == True:
-            add += f"{kind_dict['return/exchange']}"
-        elif flags.get('payment') == True:
-            add += f"{kind_dict['payment']}"
-        elif flags.get('delivery') == True:
-            add += f"{kind_dict['delivery']}"
-        else:
-            return answer
-        add += "資訊, 請登入此網址查詢[https: // www.gaii.ai / product / home / 20220317000001 / auth / sign_in]"
-        return answer + add
 
     def error(self, *arg):
         self.logger.print(*arg, level="WARNING")
@@ -427,14 +426,19 @@ class QA_api:
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
 
         #types, orders = self.get_order_type(web_id, user_id, message)
-      
-
-
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
         self.logger.print('QA歷史紀錄:\n', history)
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}')
+        # if types == 1:
+        #     gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
+        #     self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
+        #     gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+        #     if '生活愉快！' in gpt_answer:
+        #         gpt_answer = '生活愉快！'.join(gpt_answer.split("生活愉快！")[:-1]) + '生活愉快！'
+        #     self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
+        #     return gpt_answer
 
         if gps_location:
             store_result = self.search_nearest_store_nineyi000360(gps_location, history)
@@ -444,18 +448,7 @@ class QA_api:
                 message = '給我全家便利商店的位置資訊。'
             else:
                 return "親愛的顧客您好，我們不確定您的問題或需求，如果您有任何疑慮或需要任何協助，請隨時聯絡我們的客戶服務團隊。"
-                
-        # if types == 1:
-        #     gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
-        #     self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
-        #     gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
-        #     if '生活愉快！' in gpt_answer:
-        #         gpt_answer = '生活愉快！'.join(gpt_answer.split("生活愉快！")[:-1]) + '生活愉快！'
-        #     self.logger.print('訂單系統ChatGPT輸出:\n', gpt_query)
-        #     return gpt_answer
-        
         if not gps_location and flags.get('store_address') and web_id == 'nineyi000360':
-     
             keyword = ''
             gpt_query = [{'role': 'user', 'content': message}]
             gpt_answer = answer = "親愛的顧客您好，若是需要查詢最近的全家便利店位置，請提供我們您現在的位置。"
