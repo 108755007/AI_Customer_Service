@@ -454,10 +454,13 @@ class QA_api:
             gpt_answer = answer = "親愛的顧客您好，若是需要查詢最近的全家便利店位置，請提供我們您現在的位置。"
         else:
             # Step 1: get keyword from chatGPT
-            keyword_list = self.get_question_keyword(message, web_id)
-            if keyword_list == 'timeout':
-                return self.error('keyword_timeout')
-            self.logger.print('關鍵字:\t', keyword_list)
+            if gps_location:
+                keyword_list = []
+            else:
+                keyword_list = self.get_question_keyword(message, web_id)
+                if keyword_list == 'timeout':
+                    return self.error('keyword_timeout')
+                self.logger.print('關鍵字:\t', keyword_list)
 
             # Step 2: get gpt_query with search results from google search engine and likr recommend engine
             try:
@@ -501,7 +504,7 @@ class QA_api:
 
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
-
+        self.logger.print('本次問答回應時間:\t', time.time()-start_time)
         return answer
 
 
