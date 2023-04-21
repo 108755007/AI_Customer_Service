@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 # 全家分店座標 csv
-DATA_PTH = './lbs/nineyi000360.csv'
+DATA_PTH = 'nineyi000360.csv'
 # google map url 預設格式
 GOOGLE_MAP_FORMAT = 'https://www.google.com/maps/search/?api=1&query=全家便利商店+'
 

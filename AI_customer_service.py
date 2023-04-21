@@ -8,11 +8,11 @@ import jieba
 import openai
 import tiktoken
 from db import DBhelper
-from log import logger
-from AI_customer_service_utils import translation_stw, fetch_url_response
+from utils.log import logger
+from utils.AI_customer_service_utils import translation_stw, fetch_url_response
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
-from distance_calc import StoreDistanceEvaluator
+from lbs.distance_calc import StoreDistanceEvaluator
 
 
 class ChatGPT_AVD:

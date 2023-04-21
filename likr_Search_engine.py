@@ -1,4 +1,4 @@
-from AI_customer_service_utils import fetch_url_response
+from utils.AI_customer_service_utils import fetch_url_response
 import itertools
 import os
 from dotenv import load_dotenv

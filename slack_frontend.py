@@ -6,7 +6,8 @@ from functools import wraps
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from AI_customer_service import QA_api
-from log import logger
+from utils.log import logger
+from db import DBhelper
 DEBUG = False
 
 SLACK_APP_TOKEN = os.getenv('SLACK_APP_TOKEN')
@@ -31,6 +32,8 @@ def timing(func):
     return time_count
 
 def check_web_id(message):
+
+
 	for web_id in AI_customer_service.CONFIG.keys():
 		if AI_customer_service.CONFIG[web_id]['web_id'] in message:
 			return web_id
@@ -61,7 +64,12 @@ def show_bert_qa(message, body, say):
 		print(f'{"@"*20}有人要用！！{"@"*20}')
 		return
 
-	web_id = check_web_id(text)
+	query = f"""SELECT web_id FROM web_push.AI_service WHERE ts='{thread_ts}';"""
+	history = DBhelper('jupiter_new').ExecuteSelect(query)
+	if history:
+		web_id = history[0][0]
+	else:
+		web_id = check_web_id(text)
 	say(text=f"請稍等為您提供回覆...", channel=dm_channel, thread_ts=ts)
 	say(text=AI_customer_service.QA(web_id, text, [user_id, thread_ts]),
 		channel=dm_channel, thread_ts=ts,
