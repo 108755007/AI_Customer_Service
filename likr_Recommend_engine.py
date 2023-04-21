@@ -4,7 +4,7 @@ import re
 import numpy as np
 import itertools
 from db import DBhelper
-from urlencode import UrlEncode
+from utils.urlencode import UrlEncode
 
 
 class Recommend_engine:

@@ -8,11 +8,11 @@ import jieba
 import openai
 import tiktoken
 from db import DBhelper
-from log import logger
-from AI_customer_service_utils import translation_stw, fetch_url_response
+from utils.log import logger
+from utils.AI_customer_service_utils import translation_stw, fetch_url_response
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
-from distance_calc import StoreDistanceEvaluator
+from lbs.distance_calc import StoreDistanceEvaluator
 
 
 class ChatGPT_AVD:
@@ -129,7 +129,7 @@ class ChatGPT_AVD:
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Your should first address the customer's question. Then, recommend three products from the information provided by using bullet points.  Use the [number] notation to cite your sources after every subject of recommend products.\n\nCustomer's Query: {message}"""
+            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Your should first address the customer's question. Then, recommend three products from the information provided by using bullet points. Use the [number] notation to cite sources in the end of sentences.\n\nCustomer's Query: {message}"""
         else:
             chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
