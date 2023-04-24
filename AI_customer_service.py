@@ -267,30 +267,28 @@ class QA_api:
 
     def answer_append(self, answer: str, flags: dict, url_index: list, link_List : list , recommend_result) -> str:
         kind_dict = {'delivery': '到貨', 'purchase': '購買', 'payment': '付款', 'return/exchange': '退換貨', 'order': '訂單'}
+        temp_url = self.url_format(shorten_url(auth=self.auth,token= self.token, name='訂單系統暫時網址', url='https://www.gaii.ai/product/home/20220317000001/auth/sign_in'))
         if flags.get('order'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['order']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+            answer += f"\n\n若想知道更詳細的{kind_dict['order']}資訊, 請登入此網址查詢[{temp_url}]"
         elif flags.get('purchase'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['purchase']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+            answer += f"\n\n若想知道更詳細的{kind_dict['purchase']}資訊, 請登入此網址查詢[{temp_url}]"
         elif flags.get('return/exchange'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['return/exchange']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+            answer += f"\n\n若想知道更詳細的{kind_dict['return/exchange']}資訊, 請登入此網址查詢[{temp_url}]"
         elif flags.get('payment'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['payment']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+            answer += f"\n\n若想知道更詳細的{kind_dict['payment']}資訊, 請登入此網址查詢[{temp_url}]"
         elif flags.get('delivery'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['delivery']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
-        first = True
+            answer += f"\n\n若想知道更詳細的{kind_dict['delivery']}資訊, 請登入此網址查詢[{temp_url}]"
 
+        first = True
         product_url = set(i.get('link') for i in recommend_result[1] if i.get('link'))
         for i in url_index:
             idx, url, title = link_List[i]
             if url in product_url:
                 if first:
-                    if flags.get('QA'):
-                        answer += f"\n\n另外，根據您所提到的資訊，我們很高興向您推薦以下商品："
-                    else:
-                        answer += f"\n\n以下是相關商品連結："
+                    answer += f"\n\n另外，根據您所提到的資訊，我們很高興向您推薦這些商品："
                     first= False
                 url = self.url_format(url)
-                answer += f"\n{title} [{url}]"
+                answer += f"\n- {title} [{url}]"
 
         return answer
 
@@ -526,7 +524,7 @@ class QA_api:
                     answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 answer = self.answer_append(answer,flags,url_index,linkList,recommend_result)
                 self.logger.print('回答:\t', answer)
-
+                answer = re.sub(f'\[#?\d\]', '', answer)
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time)
