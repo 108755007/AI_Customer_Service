@@ -1,5 +1,6 @@
 from opencc import OpenCC
 import requests
+import json
 
 def translation_stw(text):
     cc = OpenCC('likr-s2twp')
@@ -16,3 +17,15 @@ def fetch_url_response(url, retry=3):
         retry -= 1
     return None
 
+def shorten_url(auth, token, name, url):
+    response = requests.post(
+        f"https://likr.io/api/short_url/create/{token}",
+        headers={'Authorization': auth},
+        data={'name': name, 'url': url}
+    )
+    response = json.loads(response.text)
+
+    if response.get('code') == 200 and type(response.get('message')) == dict:
+        return response.get('message').get('short_url')
+    else:
+        return None

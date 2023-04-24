@@ -9,7 +9,7 @@ import openai
 import tiktoken
 from db import DBhelper
 from utils.log import logger
-from utils.AI_customer_service_utils import translation_stw, fetch_url_response
+from utils.AI_customer_service_utils import translation_stw, fetch_url_response, shorten_url
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
 from lbs.distance_calc import StoreDistanceEvaluator
@@ -57,7 +57,7 @@ class ChatGPT_AVD:
         completion = openai.ChatCompletion.create(**kwargs)
         return completion['choices'][0]['message']['content']
 
-    def num_tokens_from_messages(self, messages: str, model: str = "gpt-3.5-turbo") -> int:
+    def num_tokens_from_messages(self, messages: list[dict], model: str = "gpt-3.5-turbo") -> int:
         """Returns the number of tokens used by a list of messages."""
         try:
             encoding = tiktoken.encoding_for_model(model)
@@ -110,28 +110,28 @@ class ChatGPT_AVD:
 
             Query: {message}
         '''
-        date = datetime.today().strftime('%Y/%m/%d')
+        result = result[0] + result[1]
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         linkList = []
         if type(result) != str:
-            chatgpt_query = """\nInformation:"""
-            for v in result:
+            chatgpt_query = f"""Act as a GPT-4 customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the customer's questions below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Use the [number] notation to cite sources in the end of sentences. Your should address the customer's question, and aiming to satisfy their needs.\n Information:"""
+            for i,v in enumerate(result):
                 if not v.get('link'):
                     continue
                 url = v.get('link')
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
                 if url in linkList:
                     continue
-                linkList.append(url)
+                linkList.append((i,url,v.get('htmlTitle')))
                 if v.get('htmlTitle'):
                     chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('htmlTitle')}"""
                 if v.get('snippet'):
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-            chatgpt_query += f"""\n\n\nCurrent date: {date}\n\nInstructions: As a customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the Query below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Your should first address the customer's question. Then, recommend three products from the information provided by using bullet points. Use the [number] notation to cite sources in the end of sentences.\n\nCustomer's Query: {message}"""
+            chatgpt_query += f"""Customer question:{message}"""
         else:
-            chatgpt_query = f"""\n\n\nCurrent date: {date}\n\nInstructions: If you are the brand, "{web_id_conf['web_name']}"({web_id_conf['web_id']}) customer service and there is no search result in product list, write a comprehensive reply to the given query. Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+            chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
@@ -156,6 +156,9 @@ class QA_api:
         self.nineyi000360_store_calc =StoreDistanceEvaluator()
         self.logger = logger
         self.frontend = frontend
+        self.auth = eval(os.getenv('SHORT_URL_TOKEN'))[0]
+        self.token = eval(os.getenv('SHORT_URL_TOKEN'))[1]
+
         if frontend == 'line':
             self.table_suffix = '_api'
             self.url_format = lambda x: ' ' + x + ' '
@@ -182,7 +185,7 @@ class QA_api:
     def get_question_keyword(self, message: str, web_id: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
                            '^如何$', '^賣$', '^有$', '^可以$', '^商品$', '^哪', '哪$'
-                           '暢銷', '熱賣', '特別', '最近', '幾天', '常常'}
+                           '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款'}
         # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
@@ -196,10 +199,6 @@ class QA_api:
         if reply == 'timeout':
             return 'timeout'
         keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
-        if not keyword_list:
-            keyword_list = [self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content選擇一個最重要的關鍵字。並且只回答此格式 "關鍵字" ,不需要其他解釋'},
-                                                  {'role': 'user', 'content': f'{message}'}],
-                                                 model='gpt-4')]
         return keyword_list
 
     def split_qa_url(self, result: list[dict], config: dict):
@@ -266,23 +265,34 @@ class QA_api:
         DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
         return df['types'].get(0), df['orders'].get(0)
 
-    def answer_append(self, answer: str, flags: dict) -> str:
+    def answer_append(self, answer: str, flags: dict, url_index: list, link_List : list , recommend_result) -> str:
         kind_dict = {'delivery': '到貨', 'purchase': '購買', 'payment': '付款', 'return/exchange': '退換貨', 'order': '訂單'}
-        add = f"\n\n想知道更詳細的"
         if flags.get('order'):
-            add += f"{kind_dict['order']}"
+            answer += f"\n\n若想知道更詳細的{kind_dict['order']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
         elif flags.get('purchase'):
-            add += f"{kind_dict['purchase']}"
+            answer += f"\n\n若想知道更詳細的{kind_dict['purchase']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
         elif flags.get('return/exchange'):
-            add += f"{kind_dict['return/exchange']}"
+            answer += f"\n\n若想知道更詳細的{kind_dict['return/exchange']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
         elif flags.get('payment'):
-            add += f"{kind_dict['payment']}"
+            answer += f"\n\n若想知道更詳細的{kind_dict['payment']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
         elif flags.get('delivery'):
-            add += f"{kind_dict['delivery']}"
-        else:
-            return answer
-        add += "資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
-        return answer + add
+            answer += f"\n\n若想知道更詳細的{kind_dict['delivery']}資訊, 請登入此網址查詢[https://www.gaii.ai/product/home/20220317000001/auth/sign_in]"
+        first = True
+
+        product_url = set(i.get('link') for i in recommend_result[1] if i.get('link'))
+        for i in url_index:
+            idx, url, title = link_List[i]
+            if url in product_url:
+                if first:
+                    if flags.get('QA'):
+                        answer += f"\n\n另外，根據您所提到的資訊，我們很高興向您推薦以下商品："
+                    else:
+                        answer += f"\n\n以下是相關商品連結："
+                    first= False
+                url = self.url_format(url)
+                answer += f"\n{title} [{url}]"
+
+        return answer
 
     ## QA Flow
     def message_classifier(self, message: str, web_id: str):
@@ -386,15 +396,19 @@ class QA_api:
 
     def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
+        url_index = []
         for url in url_set:
             reurl = url
             for char in '?':
                 reurl = reurl.replace(char, '\\' + char)
             answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
         for i, url in enumerate(linkList):
-            answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(url)}]', answer, count=1)
+            if re.search(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])',answer):
+                answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(url[1])}]', answer, count=1)
+            else:
+                url_index.append(i)
         answer = re.sub(f'\[#?\d\]', f'', answer)
-        return answer
+        return answer, url_index
 
     def adjust_ans_format(self, answer: str, ) -> str:
         if self.frontend == 'line':
@@ -477,8 +491,18 @@ class QA_api:
                     else:
                         recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
                     self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
+                    for i in recommend_result:
+                        if i.get('link'):
+                            i['link'] = shorten_url(auth=self.auth,token= self.token, name = i.get('htmlTitle'), url= i['link'])
                     if flags.get('QA'):
-                        recommend_result = n_product_result[:2] + recommend_result
+                        temp = n_product_result[:2]
+                        for i in temp:
+                            i['link'] = shorten_url(auth=self.auth,token= self.token, name = i.get('htmlTitle'), url= i['link'])
+                        recommend_result = (temp, recommend_result)
+                    else:
+                        recommend_result = ([], recommend_result)
+
+
             except Exception as e:
                 self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
                 return self.error('search_or_recommend_error')
@@ -489,17 +513,18 @@ class QA_api:
             # Step 3: response from ChatGPT
             else:
                 gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
-                self.logger.print('輸入連結:\n', '\n'.join(linkList))
+                #self.logger.print('輸入連結:\n', '\n'.join(linkList))
                 self.logger.print('ChatGPT輸入:\t', gpt_query)
 
                 gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
                 if gpt_answer == 'timeout':
                     return self.error('gpt3_answer_timeout')
                 self.logger.print('ChatGPT輸出:\t', gpt_answer)
-                answer = self.adjust_ans_format(self.adjust_ans_url_format(gpt_answer, linkList))
+                answer, url_index = self.adjust_ans_url_format(gpt_answer, linkList)
+                answer = self.adjust_ans_format(answer)
                 if web_id == 'avividai' and history == []:
                     answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
-                answer = self.answer_append(answer,flags)
+                answer = self.answer_append(answer,flags,url_index,linkList,recommend_result)
                 self.logger.print('回答:\t', answer)
 
         # Step 4: update database
@@ -514,4 +539,4 @@ if __name__ == "__main__":
     print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('pure17', '我想詢問訂單', 'test4466'))
+    print(AI_customer_service.QA('pure17', '我想找牛排', ['123456aa4422']))
