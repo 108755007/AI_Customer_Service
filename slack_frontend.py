@@ -32,8 +32,6 @@ def timing(func):
     return time_count
 
 def check_web_id(message):
-
-
 	for web_id in AI_customer_service.CONFIG.keys():
 		if AI_customer_service.CONFIG[web_id]['web_id'] in message:
 			return web_id
