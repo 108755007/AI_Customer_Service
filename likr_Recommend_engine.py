@@ -87,7 +87,7 @@ class Recommend_engine:
         # sub_domain = self.convert_subdomain(web_id)
         for row in data:
             payload = {
-                "htmlTitle": row['title'],
+                "title": row['title'],
                 "pagemap": {"metatags": [{"og:description": row['description']}]},
                 "link": row['url'],
                 # "link":sub_domain + f'/avivid/product/detail/{row["product_id"]}' if sub_domain else row['url'],

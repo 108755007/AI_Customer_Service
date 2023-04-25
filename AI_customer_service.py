@@ -114,7 +114,7 @@ class ChatGPT_AVD:
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         linkList = []
         if type(result) != str:
-            chatgpt_query = f"""Act as a GPT-4 customer service representative for "{web_id_conf['web_name']}". Your task is to respond to the customer's questions below in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Ensure that your response is comprehensive, helpful and response is generated entirely from the information provided. Use the [number] notation to cite sources in the end of sentences. Your should address the customer's question, and aiming to satisfy their needs.\n Information:"""
+            chatgpt_query = f"""You are a GPT-4 customer service representative for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, and use the [number] notation to cite sources in the end of sentences. If a customer asks for the product price, direct them to the official website. Do not generating content that is not directly related to the customer's questions.\n Information:"""
             for i,v in enumerate(result):
                 if not v.get('link'):
                     continue
@@ -122,13 +122,13 @@ class ChatGPT_AVD:
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
                 if url in linkList:
                     continue
-                linkList.append((i,url,v.get('htmlTitle')))
-                if v.get('htmlTitle'):
-                    chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('htmlTitle')}"""
+                if v.get('title'):
+                    chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('title')}"""
                 if v.get('snippet'):
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
+                linkList.append((i, url, v.get('title')))
             chatgpt_query += f"""Customer question:{message}"""
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
@@ -440,6 +440,7 @@ class QA_api:
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
+        history = []
         self.logger.print('QA歷史紀錄:\n', history)
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}')
@@ -524,7 +525,7 @@ class QA_api:
                     answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 answer = self.answer_append(answer,flags,url_index,linkList,recommend_result)
                 self.logger.print('回答:\t', answer)
-                answer = re.sub(f'\[#?\d\]', '', answer)
+                gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time)
