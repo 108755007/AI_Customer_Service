@@ -114,8 +114,8 @@ class ChatGPT_AVD:
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         linkList = []
         if type(result) != str:
-            chatgpt_query = f"""You are a GPT-4 customer service representative for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, and use the [number] notation to cite sources in the end of sentences. If a customer asks for the product price, direct them to the official website. Do not generating content that is not directly related to the customer's questions.\n Information:"""
-            for i,v in enumerate(result):
+            chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions or any information about pricing.\n Information:"""
+            for i, v in enumerate(result):
                 if not v.get('link'):
                     continue
                 url = v.get('link')
@@ -123,7 +123,7 @@ class ChatGPT_AVD:
                 if url in linkList:
                     continue
                 if v.get('title'):
-                    chatgpt_query += f"""\n\n[{len(linkList)}] "{v.get('title')}"""
+                    chatgpt_query += f"""\n\n[{len(linkList) + 1}] "{v.get('title')}"""
                 if v.get('snippet'):
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
@@ -281,11 +281,12 @@ class QA_api:
 
         first = True
         product_url = set(i.get('link') for i in recommend_result[1] if i.get('link'))
+        print(link_List)
         for i in url_index:
             idx, url, title = link_List[i]
             if url in product_url:
                 if first:
-                    answer += f"\n\n另外，根據您所提到的資訊，我們很高興向您推薦這些商品："
+                    answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
                     first= False
                 url = self.url_format(url)
                 answer += f"\n- {title} [{url}]"
@@ -399,7 +400,8 @@ class QA_api:
             reurl = url
             for char in '?':
                 reurl = reurl.replace(char, '\\' + char)
-            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
+
+            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(shorten_url(auth=self.auth, token=self.token, name='回答自產生網址', url=url)), answer)
         for i, url in enumerate(linkList):
             if re.search(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])',answer):
                 answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(url[1])}]', answer, count=1)
@@ -492,11 +494,11 @@ class QA_api:
                     self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
                     for i in recommend_result:
                         if i.get('link'):
-                            i['link'] = shorten_url(auth=self.auth,token= self.token, name = i.get('htmlTitle'), url= i['link'])
+                            i['link'] = shorten_url(auth=self.auth, token= self.token, name = i.get('title'), url= i['link'])
                     if flags.get('QA'):
                         temp = n_product_result[:2]
                         for i in temp:
-                            i['link'] = shorten_url(auth=self.auth,token= self.token, name = i.get('htmlTitle'), url= i['link'])
+                            i['link'] = shorten_url(auth=self.auth, token= self.token, name = i.get('title'), url= i['link'])
                         recommend_result = (temp, recommend_result)
                     else:
                         recommend_result = ([], recommend_result)
