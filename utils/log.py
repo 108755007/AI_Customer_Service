@@ -9,7 +9,7 @@ class logger():
     def get_logger(self,log_path):
         date = datetime.today().strftime('%Y/%m/%d')
         logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.WARNING)
         log_file_path = os.path.join(log_path, '/'.join(date.split('/')[:-1]))
         Path(log_file_path).mkdir(parents=True, exist_ok=True)
         log_file_path = os.path.join(log_file_path, f"{date.split('/')[-1]}-1.log")
@@ -29,8 +29,9 @@ class logger():
     def print(self, *args, **kwargs):
         self.logger.setLevel(logging.DEBUG)
         level = kwargs.get('level', 'INFO')
-        msg = ''.join(map(str, args))
-        print(msg)
+        hash_ = kwargs.get('hash', '')
+        msg = str(hash_) +' '+ ''.join(map(str, args))
+        print(msg+'\n')
         if level == "DEBUG":
             logging.debug(msg)
         elif level == "WARNING":
@@ -39,4 +40,4 @@ class logger():
             logging.error(msg)
         else:
             logging.info(msg)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.WARNING)
