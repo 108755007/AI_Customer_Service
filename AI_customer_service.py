@@ -112,30 +112,30 @@ class ChatGPT_AVD:
         '''
         result = result[0] + result[1]
         gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
-        linkList = []
+        links = []
         if type(result) != str:
-            chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions or any information about pricing.\n Information:"""
+            chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, use bullet points for each different subject, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions or any information about pricing.\n Information:"""
             for i, v in enumerate(result):
                 if not v.get('link'):
                     continue
                 url = v.get('link')
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
-                if url in linkList:
+                if url in links:
                     continue
                 if v.get('title'):
-                    chatgpt_query += f"""\n\n[{len(linkList) + 1}] "{v.get('title')}"""
+                    chatgpt_query += f"""\n\n[{len(links) + 1}] "{v.get('title')}"""
                 if v.get('snippet'):
                     chatgpt_query += f""",snippet = "{v.get('snippet')}"""
                 if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get('og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-                linkList.append((i, url, v.get('title')))
+                links.append((i, url, v.get('title')))
             chatgpt_query += f"""Customer question:{message}"""
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
-        return gpt_query, linkList
+        return gpt_query, links
 
     def get_gpt_order_query(self, order: str, message: str):
         gpt_query = f"""
@@ -161,7 +161,7 @@ class QA_api:
 
         if frontend == 'line':
             self.table_suffix = '_api'
-            self.url_format = lambda x: ' ' + x + ' '
+            self.url_format = lambda x: ' ' + shorten_url(auth=self.auth, token=self.token, name=self.frontend+'_gpt_customer_service', url=x) + ' '
             self.user_id_index = 0
         elif frontend == 'slack':
             self.table_suffix = ''
@@ -183,9 +183,9 @@ class QA_api:
 
     ## Search and Recommend
     def get_question_keyword(self, message: str, web_id: str) -> list:
-        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$'
-                           '^如何$', '^賣$', '^有$', '^可以$', '^商品$', '^哪', '哪$'
-                           '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款'}
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$',
+                           '^如何$', '^賣$', '^有$', '^可以$', '^商品$', '^哪', '哪$', '有賣',
+                           '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦'}
         # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
@@ -264,34 +264,6 @@ class QA_api:
         df['timestamps'] = timestamps
         DBhelper.ExecuteUpdatebyChunk(df, db='jupiter_new', table='AI_service_order_test', is_ssh=False)
         return df['types'].get(0), df['orders'].get(0)
-
-    def answer_append(self, answer: str, flags: dict, url_index: list, link_List : list , recommend_result) -> str:
-        kind_dict = {'delivery': '到貨', 'purchase': '購買', 'payment': '付款', 'return/exchange': '退換貨', 'order': '訂單'}
-        temp_url = self.url_format(shorten_url(auth=self.auth,token= self.token, name='訂單系統暫時網址', url='https://www.gaii.ai/product/home/20220317000001/auth/sign_in'))
-        if flags.get('order'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['order']}資訊, 請登入此網址查詢[{temp_url}]"
-        elif flags.get('purchase'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['purchase']}資訊, 請登入此網址查詢[{temp_url}]"
-        elif flags.get('return/exchange'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['return/exchange']}資訊, 請登入此網址查詢[{temp_url}]"
-        elif flags.get('payment'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['payment']}資訊, 請登入此網址查詢[{temp_url}]"
-        elif flags.get('delivery'):
-            answer += f"\n\n若想知道更詳細的{kind_dict['delivery']}資訊, 請登入此網址查詢[{temp_url}]"
-
-        first = True
-        product_url = set(i.get('link') for i in recommend_result[1] if i.get('link'))
-        print(link_List)
-        for i in url_index:
-            idx, url, title = link_List[i]
-            if url in product_url:
-                if first:
-                    answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
-                    first= False
-                url = self.url_format(url)
-                answer += f"\n- {title} [{url}]"
-
-        return answer
 
     ## QA Flow
     def message_classifier(self, message: str, web_id: str):
@@ -393,59 +365,77 @@ class QA_api:
             flags_class['QA'] = True
         return flags_class, flags
 
-    def adjust_ans_url_format(self, answer: str, linkList: list) -> str:
-        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
-        url_index = []
-        for url in url_set:
-            reurl = url
-            for char in '?':
-                reurl = reurl.replace(char, '\\' + char)
-
-            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(shorten_url(auth=self.auth, token=self.token, name='回答自產生網址', url=url)), answer)
-        for i, url in enumerate(linkList):
-            if re.search(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])',answer):
-                answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(url[1])}]', answer, count=1)
-            else:
-                url_index.append(i)
-        answer = re.sub(f'\[#?\d\]', f'', answer)
-        return answer, url_index
-
     def adjust_ans_format(self, answer: str, ) -> str:
         if self.frontend == 'line':
             answer.replace('"', "'")
-        replace_words = {'此致', '敬禮', '<b>', '</b>', r'\[?\[\d\]?\]?|\[?\[?\d\]\]?', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
+        replace_words = {'此致', '敬禮', '<b>', '</b>', '\w*(抱歉|對不起)\w{0,3}(，|。)'}
         for w in replace_words:
             answer = re.sub(w, '', answer).strip('\n')
         if '親愛的' in answer:
             answer = '親愛的' + '親愛的'.join(answer.split("親愛的")[1:])
-        if '祝您愉快！' in answer:
-            answer = '祝您愉快！'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
+        if '祝您愉快' in answer:
+            answer = '祝您愉快'.join(answer.split("祝您愉快！")[:-1]) + '祝您愉快！'
         return answer
 
-    def error(self, *arg):
-        self.logger.print(*arg, level="WARNING")
+    def adjust_ans_url_format(self, answer: str, links: list, config: dict) -> str:
+        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
+        unused_links, product_domain = [], [i.strip('*') for i in config['product_url'].split(',')]
+        for url in url_set:
+            reurl = url
+            for char in '?':
+                reurl = reurl.replace(char, '\\' + char)
+            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
+        for i, info in enumerate(links):
+            if re.search(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', answer):
+                answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(info[1])}]', answer, count=1)
+            elif any([url in info[1] for url in product_domain]):
+                unused_links.append(info)
+        answer = re.sub(f'\[#?\d\]', f'', answer)
+        return answer, unused_links
+
+    def answer_append(self, answer: str, flags: dict, unused_links: list) -> str:
+        flag_dict = {'delivery': ('到貨', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
+                     'purchase': ('購買', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
+                     'payment': ('付款', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
+                     'return/exchange': ('退換貨', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
+                     'order': ('訂單', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in')}
+        for k, v in flag_dict.items():
+            if flags.get(k):
+                answer += f"\n\n若想知道更詳細的{v[0]}資訊, 請登入此網址查詢[{self.url_format(v[1])}]"
+                break
+        first = True
+        for idx, url, title in unused_links:
+            if first:
+                answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
+                first= False
+            answer += f"\n- {title} [{self.url_format(url)}]"
+        return answer
+
+    def error(self, *arg, **kwargs):
+        hash_ = kwargs.get('hash', '0000000000000000')
+        self.logger.print(*arg, level="WARNING", hash=hash_)
         return '客服忙碌中，請稍後再試。'
 
     def QA(self, web_id: str, message: str, info: str | list):
         start_time = time.time()
         user_id = info[self.user_id_index]
-
+        hash_ = str(abs(hash(str(user_id)+message)))[:6]
         message, gps_location = self.message_classifier(message, web_id)
         if not message and not gps_location:
             return
-        self.logger.print(f'Get Message:\t{message}')
+        self.logger.print(f'Get Message:\t{message}', hash=hash_)
 
         if not self.check_message_length(message, 50):
-            self.logger.print('USER ERROR: Input too long!')
+            self.logger.print('USER ERROR: Input too long!', hash=hash_)
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
 
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
         history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
         history = []
-        self.logger.print('QA歷史紀錄:\n', history)
+        self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
         flags, f = self.judge_question_type(message)
-        self.logger.print(f'客戶意圖:\t{flags}\n{f}')
+        self.logger.print(f'客戶意圖:\t{flags}\n{f}', hash=hash_)
         # if types == 1:
         #     gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
         #     self.logger.print('訂單系統ChatGPT輸入:\n',gpt_query)
@@ -474,8 +464,8 @@ class QA_api:
             else:
                 keyword_list = self.get_question_keyword(message, web_id)
                 if keyword_list == 'timeout':
-                    return self.error('keyword_timeout')
-                self.logger.print('關鍵字:\t', keyword_list)
+                    return self.error('keyword_timeout', hash=hash_)
+                self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
 
             # Step 2: get gpt_query with search results from google search engine and likr recommend engine
             try:
@@ -484,53 +474,45 @@ class QA_api:
                     keyword = '全家'
                 else:
                     result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id]))
-                    self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}')
+                    self.logger.print(f'Search_result:\t {[i.get("link") for i in result if i.get("link")], keyword}', hash=hash_)
                     n_product_result, product_result = self.split_qa_url(result, self.CONFIG[web_id])
-                    self.logger.print(f'QA_result:\t {[i.get("link") for i in n_product_result if i.get("link")], keyword}')
+                    self.logger.print(f'QA_result:\t {[i.get("link") for i in n_product_result if i.get("link")], keyword}', hash=hash_)
+                    self.logger.print(f'Product_result:\t {[i.get("link") for i in product_result if i.get("link")], keyword}', hash=hash_)
                     if web_id == 'avividai':
                         recommend_result = result[:3]
                     else:
                         recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
-                    self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}')
-                    for i in recommend_result:
-                        if i.get('link'):
-                            i['link'] = shorten_url(auth=self.auth, token= self.token, name = i.get('title'), url= i['link'])
-                    if flags.get('QA'):
-                        temp = n_product_result[:2]
-                        for i in temp:
-                            i['link'] = shorten_url(auth=self.auth, token= self.token, name = i.get('title'), url= i['link'])
-                        recommend_result = (temp, recommend_result)
-                    else:
-                        recommend_result = ([], recommend_result)
-
-
+                    self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}', hash=hash_)
+                    recommend_result = (n_product_result[:2] if flags.get('QA') else [], recommend_result)
             except Exception as e:
-                self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR')
-                return self.error('search_or_recommend_error')
+                self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR', hash=hash_)
+                return self.error('search_or_recommend_error', hash=hash_)
 
             if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
                 gpt_query = [{'role': 'user', 'content': message}]
                 gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
             # Step 3: response from ChatGPT
             else:
-                gpt_query, linkList = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
-                #self.logger.print('輸入連結:\n', '\n'.join(linkList))
-                self.logger.print('ChatGPT輸入:\t', gpt_query)
+                gpt_query, links = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
+                self.logger.print('輸入連結:\n', '\n'.join(' '.join(i[1:]) for i in links), hash=hash_)
+                self.logger.print('ChatGPT輸入:\t', gpt_query, hash=hash_)
 
                 gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
                 if gpt_answer == 'timeout':
-                    return self.error('gpt3_answer_timeout')
-                self.logger.print('ChatGPT輸出:\t', gpt_answer)
-                answer, url_index = self.adjust_ans_url_format(gpt_answer, linkList)
-                answer = self.adjust_ans_format(answer)
-                if web_id == 'avividai' and history == []:
-                    answer += """至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
-                answer = self.answer_append(answer,flags,url_index,linkList,recommend_result)
-                self.logger.print('回答:\t', answer)
+                    return self.error('gpt3_answer_timeout', hash=hash_)
+                self.logger.print('ChatGPT輸出:\t', gpt_answer, hash=hash_)
+                answer = self.adjust_ans_format(gpt_answer)
+                answer, unused_links = self.adjust_ans_url_format(answer, links, self.CONFIG[web_id])
+                if web_id == 'avividai':
+                    if not history:
+                        answer += """\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
+                else:
+                    answer = self.answer_append(answer, flags, unused_links)
+                self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
-        self.logger.print('本次問答回應時間:\t', time.time()-start_time)
+        self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
         return answer
 
 

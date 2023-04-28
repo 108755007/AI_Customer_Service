@@ -144,21 +144,3 @@ class Recommend_engine:
                 random.shuffle(product_result)
                 result += (product_result[:2] + search_result[:1] + product_result[2:3] + search_result[1:] + product_result[3:])
         return result
-
-
-if __name__ == '__main__':
-    questions = DBhelper('jupiter_new').ExecuteSelect("SELECT question FROM web_push.AI_service_cache where id = 22;")
-    from datetime import datetime
-
-    s = datetime.now()
-    engine = Search_engine()
-    for question in ['牛排有優惠嗎？']:
-        # question = question['question']
-        print('question : ', question)
-        data = engine.likr_recommend_engine(query=question, web_id='nineyi000360')
-        # data = engine.is_hot(question)
-        print(data)
-    print(f'{datetime.now() - s}')
-# question = "有什麼優惠活動"
-# print(question)
-# engine.question_pos_parser(question=question)
