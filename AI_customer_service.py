@@ -85,8 +85,19 @@ class ChatGPT_AVD:
                     num_tokens += tokens_per_name
         num_tokens += 3
         return num_tokens
+    def get_continue_query(self, message: str, history :list):
+        ans = 'I want you to act as a customer support representative by responding to the questions according to the provided Q&A record, and always start your replies with "親愛的顧客您好". The Q&A record for reference is: \n\n'
+        for i in range(0,len(history),2):
+            ans += f"Q{i//2 + 1}:{history[i].get('content')}\n"
+            ans += f"A{i//2 + 1}:{history[i+1].get('content')}\n"
+        ans += f"\n\nThe question is: '{message}' Remember provide a response based on the information in the Q&A record and you can only answer data that you have, not data that doesn't exist."
+        return ans
 
-    def get_gpt_query(self, result: list, message: str, history: list, web_id_conf: dict):
+
+
+
+
+    def get_gpt_query(self, result: list, message: str, history: list, web_id_conf: dict, continuity: bool):
         '''
         :param query: result from likr_search
         :param query: question for chatgpt
@@ -111,7 +122,7 @@ class ChatGPT_AVD:
             Query: {message}
         '''
         result = result[0] + result[1]
-        gpt_query = history if history else [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
+        gpt_query = [{"role": "system", "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
         links = []
         if type(result) != str:
             chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, use bullet points for each different subject, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions or any information about pricing.\n Information:"""
@@ -132,6 +143,10 @@ class ChatGPT_AVD:
             chatgpt_query += f"""Customer question:{message}"""
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+        chatgpt_query = chatgpt_query if not continuity else self.get_continue_query(message,history)
+
+
+        #####################################################################################
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
         while self.num_tokens_from_messages(gpt_query) > 3500 and len(gpt_query) > 3:
             gpt_query = [gpt_query[0]] + gpt_query[3:]
@@ -193,7 +208,7 @@ class QA_api:
             for j in list(jieba.cut(i)):
                 message = re.sub(j, '', message)
         # segmentation
-        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,若存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
+        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': '你會將user的content進行切詞,再依重要性評分數,如果存在商品名詞,商品名詞的分數為原本的兩倍。並且只回答此格式為 {"詞":分數} ,不需要其他解釋。'},
                                       {'role': 'user', 'content': f'{message}'}],
                                      model='gpt-4')
         if reply == 'timeout':
@@ -213,18 +228,18 @@ class QA_api:
 
     def get_history_df(self, web_id: str, info: str | list) -> pd.DataFrame:
         if self.frontend == 'line':
-            query = f"""SELECT id, web_id, group_id, counts, question, answer, q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info[0]}' and web_id = '{web_id}';"""
+            query = f"""SELECT id, web_id, group_id, counts, question, answer, keyword_list,q_a_history, add_time FROM web_push.AI_service_api WHERE group_id = '{info[0]}' and web_id = '{web_id}';"""
             df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
-                              columns=['id', 'web_id', 'group_id', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+                              columns=['id', 'web_id', 'group_id', 'counts', 'question', 'answer', 'keyword_list','q_a_history', 'add_time'])
         if self.frontend == 'slack':
-            query = f"""SELECT id, web_id, user_id, ts, counts, question, answer, q_a_history, add_time FROM web_push.AI_service WHERE ts='{info[1]}';"""
+            query = f"""SELECT id, web_id, user_id, ts, counts, question, answer, keyword_list, q_a_history, add_time FROM web_push.AI_service WHERE ts='{info[1]}';"""
             df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
-                              columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'q_a_history', 'add_time'])
+                              columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'keyword_list', 'q_a_history', 'add_time'])
         return df
 
     def update_history_df(self, web_id: str, info: str | list, history_df: pd.DataFrame,
-                          message: str, answer: str, keyword: str, response_time: float,
-                          gpt_query: list, gpt_answer: str) -> pd.DataFrame:
+                          message: str, answer: str, keyword: str, keyword_list: list,response_time: float,
+                          gpt_query: list, continuity: bool) -> pd.DataFrame:
         if len(history_df) == 0:
             if self.frontend == 'line':
                 history_df = pd.DataFrame([[web_id, info[0], 0, datetime.now()]],
@@ -233,11 +248,13 @@ class QA_api:
                 history_df = pd.DataFrame([[web_id, info[0], info[1], 0, datetime.now()]],
                                           columns=['web_id', 'user_id', 'ts', 'counts', 'add_time'])
         history_df['counts'] += 1
-        history_df[['question', 'answer', 'keyword', 'response_time', 'q_a_history']] = [message, answer, keyword, response_time, json.dumps(gpt_query[:-1] + [{"role": "assistant", "content": f"{gpt_answer}"}])]
-        history_df['q_a_history'] =  json.dumps(gpt_query[:-1] + [{"role": "user", "content": f"{message}"}, {"role": "assistant", "content": f"{gpt_answer}"}])
+        history_df[['answer', 'keyword', 'response_time']] = [answer, keyword, response_time]
+        history_df['question'] = history_df['question'].iloc[0] if continuity else message
+        history_df['keyword_list'] = str(keyword_list)
+        history_df['q_a_history'] =  json.dumps(json.loads(history_df['q_a_history'].iloc[0]) + [{"role": "user", "content": f"{message}"}, {"role": "assistant", "content": f"{answer}"}] if continuity else [{"role": "user", "content": f"{message}"}, {"role": "assistant", "content": f"{answer}"}])
         _df = history_df.drop(columns=['keyword', 'response_time'])
         DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service{self.table_suffix}', is_ssh=False)
-        _df = history_df.drop(columns=['q_a_history'])
+        _df = history_df.drop(columns=['q_a_history','keyword_list'])
         if 'id' in history_df.columns:
             _df = _df.drop(columns=['id'])
         DBhelper.ExecuteUpdatebyChunk(_df, db='jupiter_new', table=f'AI_service_cache{self.table_suffix}', is_ssh=False)
@@ -278,7 +295,15 @@ class QA_api:
             if fetch_url_response(url):
                 message = message.replace(url, '')
         return len(message) <= length
-
+    def check_message_continuity(self, Question1: str, Question2: str):
+        system_query = """I want you to act as a continuity judge for pairs of questions in Chinese. For each pair, determine if they have continuity or not. Respond with 'True' if they have continuity, and 'False' if they don't. For example, q1=有沒有推薦的熱門商品, q2=有沒有推薦的冰箱. Although both questions are about recommended products, they focus on different items, so they don't have continuity. Your response should be 'False'. Please provide your first pair of questions."""
+        reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content':f"q1={Question1}。,q2={Question2}。"}], model='gpt-4',timeout=15)
+        print(reply)
+        print(Question1)
+        print(Question2)
+        if 'True' in reply:
+            return True
+        return False
     def judge_question_type(self, message: str) -> tuple:
         flag_dict = {'Product details': 'product',
                      'Accessories selection': 'product',
@@ -431,8 +456,8 @@ class QA_api:
 
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
-        history = json.loads(history_df['q_a_history'].iloc[0]) if len(history_df) > 0 else []
-        history = []
+        continuity = self.check_message_continuity(history_df['question'].iloc[0],message) if len(history_df) > 0 else False
+        history = json.loads(history_df['q_a_history'].iloc[0]) if (len(history_df) > 0 and continuity) else []
         self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
         flags, f = self.judge_question_type(message)
         self.logger.print(f'客戶意圖:\t{flags}\n{f}', hash=hash_)
@@ -461,8 +486,10 @@ class QA_api:
             # Step 1: get keyword from chatGPT
             if gps_location:
                 keyword_list = []
+            elif continuity:
+                keyword_list = eval(history_df['keyword_list'].iloc[0])
             else:
-                keyword_list = self.get_question_keyword(message, web_id)
+                keyword_list = self.get_question_keyword(message, web_id) if not continuity else self.get_question_keyword(history_df['question'].iloc[0], web_id)
                 if keyword_list == 'timeout':
                     return self.error('keyword_timeout', hash=hash_)
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
@@ -493,7 +520,7 @@ class QA_api:
                 gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
             # Step 3: response from ChatGPT
             else:
-                gpt_query, links = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id])
+                gpt_query, links = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id], continuity)
                 self.logger.print('輸入連結:\n', '\n'.join(' '.join(i[1:]) for i in links), hash=hash_)
                 self.logger.print('ChatGPT輸入:\t', gpt_query, hash=hash_)
 
@@ -511,15 +538,15 @@ class QA_api:
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
-        self.update_history_df(web_id, info, history_df, message, answer, keyword, time.time()-start_time, gpt_query, gpt_answer)
+        self.update_history_df(web_id, info, history_df, message, answer, keyword, keyword_list, time.time()-start_time, gpt_query, continuity)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
         return answer
 
 
 if __name__ == "__main__":
     # slack
-    AI_customer_service = QA_api('slack', logger())
-    print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
+    #AI_customer_service = QA_api('slack', logger())
+    #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('pure17', '我想找牛排', ['123456aa4422']))
+    print(AI_customer_service.QA('pure17', '請問價格是多少呢', ['123456aa4422']))
