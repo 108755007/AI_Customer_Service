@@ -296,7 +296,7 @@ class QA_api:
                 message = message.replace(url, '')
         return len(message) <= length
     def check_message_continuity(self, Question1: str, Question2: str):
-        system_query = """I want you to act as a continuity judge for pairs of questions in Chinese. For each pair, determine if they have continuity or not. Respond with 'True' if they have continuity, and 'False' if they don't. For example, q1=有沒有推薦的熱門商品, q2=有沒有推薦的冰箱. Although both questions are about recommended products, they focus on different items, so they don't have continuity. Your response should be 'False'. Please provide your first pair of questions."""
+        system_query = """"I would like you to evaluate the continuity and similarity of specific Chinese product references in the given sentences. Determine if both sentences refer to the same or a continuous product/topic, and reply with 'True'. If not, reply with 'False'. For instance, q1=我想要買海鮮, q2=我想買鮪魚; Although 鮪魚 is part of the 海鮮 category, the first sentence discusses a wide range of ingredients while the second focuses on a specific item, so the answer is 'False'. Please evaluate the following sentence pair: (provide the sentences)."""
         reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': system_query}, {'role': 'user', 'content':f"q1={Question1}。,q2={Question2}。"}], model='gpt-4',timeout=15)
         print(reply)
         print(Question1)
@@ -549,4 +549,4 @@ if __name__ == "__main__":
     #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('pure17', '請問價格是多少呢', ['123456aa4422']))
+    #print(AI_customer_service.QA('pure17', '請問價格是多少呢', ['123456aa4422']))
