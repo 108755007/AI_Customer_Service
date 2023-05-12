@@ -442,12 +442,13 @@ class QA_api:
         answer = re.sub(f'\[#?\d\]', f'', answer)
         return answer, unused_links
 
-    def answer_append(self, answer: str, flags: dict, unused_links: list) -> str:
-        flag_dict = {'delivery': ('到貨', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
-                     'purchase': ('購買', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
-                     'payment': ('付款', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
-                     'return/exchange': ('退換貨', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in'),
-                     'order': ('訂單', 'https://www.gaii.ai/product/home/20220317000001/auth/sign_in')}
+
+    def answer_append(self, answer: str, flags: dict, unused_links: list, config: dict) -> str:
+        flag_dict = {'delivery': ('到貨', config['web_url']),
+                     'purchase': ('購買', config['web_url']),
+                     'payment': ('付款', config['web_url']),
+                     'return/exchange': ('退換貨', config['web_url']),
+                     'order': ('訂單', config['web_url'])}
         for k, v in flag_dict.items():
             if flags.get(k):
                 answer += f"\n\n若想知道更詳細的{v[0]}資訊, 請登入此網址查詢[{self.url_format(v[1])}]"
@@ -561,7 +562,7 @@ class QA_api:
                     if not history:
                         answer += """\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 else:
-                    answer = self.answer_append(answer, flags, unused_links)
+                    answer = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
