@@ -1,3 +1,5 @@
+import collections
+import random
 from dotenv import load_dotenv
 load_dotenv()
 import os, traceback, re, json, time
@@ -173,6 +175,7 @@ class QA_api:
         self.frontend = frontend
         self.auth = eval(os.getenv('SHORT_URL_TOKEN'))[0]
         self.token = eval(os.getenv('SHORT_URL_TOKEN'))[1]
+        self.ban_keyword = self.get_black_keyword()
 
         if frontend == 'line':
             self.table_suffix = '_api'
@@ -182,6 +185,13 @@ class QA_api:
             self.table_suffix = ''
             self.url_format = lambda x: '<' + x + '|查看更多>'
             self.user_id_index = 0
+
+    def get_black_keyword(self):
+        ban_keyword = collections.defaultdict(dict)
+        config = DBhelper('jupiter_new').ExecuteSelect("SELECT web_id,black_keyword,keyword_list FROM web_push.keyword_substitution")
+        for web_id,keyword,keyword_list in config:
+            ban_keyword[web_id][keyword] = eval(keyword_list)
+        return ban_keyword
 
     def get_config(self):
         '''
@@ -289,6 +299,20 @@ class QA_api:
             return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
         else:
             return message, tuple()
+    def check_keyword(selfs,keyword_list,ban_keyword):
+        if not ban_keyword:
+            return keyword_list,keyword_list
+        new_keyword_list = []
+        for keyword in keyword_list:
+            if ban_keyword.get(keyword):
+                new_keyword_list.append(random.choice(ban_keyword.get(keyword)))
+            else:
+                new_keyword_list.append(keyword)
+        return new_keyword_list,keyword_list
+
+
+
+
 
     def check_message_length(self, message: str, length: int = 50) -> bool:
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
@@ -457,6 +481,7 @@ class QA_api:
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
         continuity = self.check_message_continuity(history_df['question'].iloc[0],message) if len(history_df) > 0 else False
+        continuity = False
         history = json.loads(history_df['q_a_history'].iloc[0]) if (len(history_df) > 0 and continuity) else []
         self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
         flags, f = self.judge_question_type(message)
@@ -488,11 +513,13 @@ class QA_api:
                 keyword_list = []
             elif continuity:
                 keyword_list = eval(history_df['keyword_list'].iloc[0])
+                keyword_list,org_keyword_list = self.check_keyword(keyword_list, self.ban_keyword.get(web_id))
             else:
                 keyword_list = self.get_question_keyword(message, web_id) if not continuity else self.get_question_keyword(history_df['question'].iloc[0], web_id)
                 if keyword_list == 'timeout':
                     return self.error('keyword_timeout', hash=hash_)
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
+                keyword_list,org_keyword_list = self.check_keyword(keyword_list,self.ban_keyword.get(web_id))
 
             # Step 2: get gpt_query with search results from google search engine and likr recommend engine
             try:
@@ -538,7 +565,7 @@ class QA_api:
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
-        self.update_history_df(web_id, info, history_df, message, answer, keyword, keyword_list, time.time()-start_time, gpt_query, continuity)
+        self.update_history_df(web_id, info, history_df, message, answer, keyword, org_keyword_list, time.time()-start_time, gpt_query, continuity)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
         return answer
 
