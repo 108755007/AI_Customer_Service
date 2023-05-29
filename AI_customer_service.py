@@ -246,7 +246,10 @@ class QA_api:
             df = pd.DataFrame(DBhelper('jupiter_new').ExecuteSelect(query),
                               columns=['id', 'web_id', 'user_id', 'ts', 'counts', 'question', 'answer', 'keyword_list', 'q_a_history', 'add_time'])
         return df
-
+    def update_recommend_status(self, web_id: str, group_id: str, status: int, recommend =''):
+        if status == 1 and recommend == '':
+            status = 2
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id, group_id, status, recommend,int(datetime.timestamp(datetime.now()))]],columns=['web_id', 'group_id', 'status', 'recommend','timestamp']), db='jupiter_new', table=f'AI_service_recommend_status', is_ssh=False)
     def update_history_df(self, web_id: str, info: str | list, history_df: pd.DataFrame,
                           message: str, answer: str, keyword: str, keyword_list: list,response_time: float,
                           gpt_query: list, continuity: bool) -> pd.DataFrame:
@@ -442,24 +445,41 @@ class QA_api:
         answer = re.sub(f'\[#?\d\]', f'', answer)
         return answer, unused_links
 
+    def split_word(self,document):
+        """
+        分词，去除停用词
+        """
+        stop_words = {":", "的", "，", "”"}
 
+        text = []
+        for word in jieba.cut(document):
+            if word not in stop_words:
+                text.append(word)
+        return text
     def answer_append(self, answer: str, flags: dict, unused_links: list, config: dict) -> str:
         flag_dict = {'delivery': ('到貨', config['web_url']),
                      'purchase': ('購買', config['web_url']),
                      'payment': ('付款', config['web_url']),
                      'return/exchange': ('退換貨', config['web_url']),
                      'order': ('訂單', config['web_url'])}
+        answer_set = set(self.split_word(answer))
         for k, v in flag_dict.items():
             if flags.get(k):
                 answer += f"\n\n若想知道更詳細的{v[0]}資訊, 請登入此網址查詢[{self.url_format(v[1])}]"
                 break
         first = True
+        recommend_answer = ''
         for idx, url, title in unused_links:
-            if first:
-                answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
-                first= False
-            answer += f"\n- {title} [{self.url_format(url)}]"
-        return answer
+            title_set = set(self.split_word(title))
+            similar12 = len(answer_set & title_set) / len(title_set)
+            if similar12 >= 0.6:
+                answer += f'\n[{self.url_format(url)}]'
+            else:
+                if first:
+                    recommend_answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
+                    first= False
+                recommend_answer += f"\n- {title} [{self.url_format(url)}]"
+        return answer,recommend_answer
 
     def error(self, *arg, **kwargs):
         hash_ = kwargs.get('hash', '0000000000000000')
@@ -478,7 +498,10 @@ class QA_api:
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!', hash=hash_)
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
+        ####
+        self.update_recommend_status(web_id,user_id,0)
 
+        ####
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
         continuity = self.check_message_continuity(history_df['question'].iloc[0],message) if len(history_df) > 0 else False
@@ -562,11 +585,12 @@ class QA_api:
                     if not history:
                         answer += """\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 else:
-                    answer = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
+                    answer,recommend_ans = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
         self.update_history_df(web_id, info, history_df, message, answer, keyword, org_keyword_list, time.time()-start_time, gpt_query, continuity)
+        self.update_recommend_status(web_id, user_id, 1, recommend_ans)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
         return answer
 
