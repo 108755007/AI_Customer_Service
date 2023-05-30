@@ -476,7 +476,7 @@ class QA_api:
                 answer += f'\n[{self.url_format(url)}]'
             else:
                 if first:
-                    recommend_answer += f"\n\n謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
+                    recommend_answer += f"謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
                     first= False
                 recommend_answer += f"\n- {title} [{self.url_format(url)}]"
         return answer,recommend_answer
@@ -583,6 +583,7 @@ class QA_api:
                 answer, unused_links = self.adjust_ans_url_format(answer, links, self.CONFIG[web_id])
                 if web_id == 'avividai':
                     if not history:
+                        recommend_ans = ''
                         answer += """\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 else:
                     answer,recommend_ans = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
