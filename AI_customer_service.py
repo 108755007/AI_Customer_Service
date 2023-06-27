@@ -15,7 +15,7 @@ from utils.AI_customer_service_utils import translation_stw, fetch_url_response,
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
 from lbs.distance_calc import StoreDistanceEvaluator
-
+from slackwarningletter import slack_warning
 
 class ChatGPT_AVD:
     def __init__(self):
@@ -28,6 +28,7 @@ class ChatGPT_AVD:
             # get token_id
             if 'gpt-4' in model:
                 query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
+                query = 'x WHERE id < 6'.join(query.split('x'))
                 token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
                 config = {'api_key': self.OPEN_AI_KEY_DICT[token_id],
                           'api_type': 'open_ai',
@@ -169,6 +170,7 @@ class QA_api:
         self.ChatGPT = ChatGPT_AVD()
         self.Search = Search_engine()
         self.Recommend = Recommend_engine()
+        self.slack = slack_warning()
         self.nineyi000360_store_calc =StoreDistanceEvaluator()
         self.logger = logger
         self.frontend = frontend
@@ -302,6 +304,7 @@ class QA_api:
             return message, eval(re.search('\(\d{1,3}\.\d+,\d{1,3}\.\d+\)', message).group(0))
         else:
             return message, tuple()
+
     def check_keyword(selfs,keyword_list,ban_keyword):
         if not ban_keyword:
             return keyword_list,keyword_list
@@ -313,15 +316,12 @@ class QA_api:
                 new_keyword_list.append(keyword)
         return new_keyword_list,keyword_list
 
-
-
-
-
     def check_message_length(self, message: str, length: int = 50) -> bool:
         for url in re.findall(r'https?:\/\/[\w\.\-\/\?\=\+&#$%^;%_]+', message):
             if fetch_url_response(url):
                 message = message.replace(url, '')
         return len(message) <= length
+
     def check_message_continuity(self, history_df, message: str):
         now_timestamp = datetime.timestamp(datetime.now())
         up_timestamp = datetime.timestamp(history_df['update_time'].iloc[0])
@@ -344,6 +344,7 @@ class QA_api:
         if 'True' in reply:
             return True
         return False
+
     def judge_question_type(self, message: str) -> tuple:
         flag_dict = {'Product details': 'product',
                      'Accessories selection': 'product',
@@ -458,17 +459,14 @@ class QA_api:
         answer = re.sub(f'\[#?\d\]', f'', answer)
         return answer, unused_links
 
-    def split_word(self,document):
-        """
-        分词，去除停用词
-        """
+    def split_word(self, document):
         stop_words = {":", "的", "，", "”"}
-
         text = []
         for word in jieba.cut(document):
             if word not in stop_words:
                 text.append(word)
         return text
+
     def answer_append(self, answer: str, flags: dict, unused_links: list, config: dict) -> str:
         flag_dict = {'delivery': ('到貨', config['web_url']),
                      'purchase': ('購買', config['web_url']),
@@ -492,7 +490,7 @@ class QA_api:
                     recommend_answer += f"謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品："
                     first= False
                 recommend_answer += f"\n- {title} [{self.url_format(url)}]"
-        return answer,recommend_answer
+        return answer, recommend_answer
 
     def error(self, *arg, **kwargs):
         hash_ = kwargs.get('hash', '0000000000000000')
@@ -511,14 +509,26 @@ class QA_api:
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!', hash=hash_)
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
-        ####
+        ####上傳推薦狀態
         self.update_recommend_status(web_id,user_id,0)
+        ####檢查是否為顧客資訊
+        if web_id in {'AviviD', 'avividai'}:
+            if '聯絡人' in message and '電話' in message and '聯絡人電話' not in message:
+                name = re.findall(r'聯絡人(.\w*)', message)[0][1:]
+                phone = re.findall(r'電話(.\w*)', message)[0][1:]
+                times = re.findall(r'方便聯絡的時間(.\w*)', message)[0][1:]
+                self.slack.send_letter(f"""有客戶留下了資訊,請確認!\n姓名:{name}\n電話:{phone}\n聯絡時間:{times}""")
+                DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[web_id, info[0], name, phone,times]],columns=['web_id', 'group_id', 'name', 'phone','contact_time']), db='jupiter_new', table=f'AI_service_customer_Information', is_ssh=False)
+                return '已收到您的資訊！,會在找時間與您聯繫'
+
+
+
 
         ####
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
         continuity = self.check_message_continuity(history_df, message) if len(history_df) > 0 else False
-        #continuity = False
+        continuity = False
         history = json.loads(history_df['q_a_history'].iloc[0]) if (len(history_df) > 0 and continuity) else []
         self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
         flags, f = self.judge_question_type(message)
@@ -598,7 +608,7 @@ class QA_api:
                 if web_id in {'AviviD', 'avividai'}:
                     if not history:
                         recommend_ans = ''
-                        answer += """\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！\n\n表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
+                        answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n聯絡人：\n電話：\n方便聯絡的時間：\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 else:
                     answer,recommend_ans = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
                 self.logger.print('回答:\t', answer, hash=hash_)
