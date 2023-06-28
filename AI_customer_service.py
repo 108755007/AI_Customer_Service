@@ -609,7 +609,7 @@ class QA_api:
                 if web_id in {'AviviD', 'avividai'}:
                     if not history:
                         recommend_ans = ''
-                        answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n聯絡人：\n電話：\n方便聯絡的時間：\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
+                        answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
                 else:
                     answer,recommend_ans = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
                 self.logger.print('回答:\t', answer, hash=hash_)
@@ -627,4 +627,4 @@ if __name__ == "__main__":
     #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('AviviD', '聯絡人:江宗諭 電話:09050120 方便聯絡的時間:56599', ['123456aa4422']))
+    print(AI_customer_service.QA('magiplanet', '你們有賣什麼', ['123456aa4422']))
