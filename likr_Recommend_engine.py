@@ -16,7 +16,7 @@ class Recommend_engine:
     def fetch_hot_rank(web_id: str):
         output = {}
         query = f"""SELECT product_id, rank FROM web_push.all_hot_items WHERE web_id = '{web_id}';"""
-        data = DBhelper('rhea1-db0').ExecuteSelect(query=query)
+        data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query=query)
         for row in data:
             output[row['product_id']] = int(row['rank'])
         return output
@@ -36,14 +36,14 @@ class Recommend_engine:
 		            (SELECT article_id FROM web_push.keyword_article_list 
 		                WHERE web_id = '{web_id}' AND keyword like '%{word64}%') kl 
 		            WHERE il.product_id = kl.article_id AND il.web_id = '{web_id}' AND il.title like '%{word}%';"""
-        result = DBhelper('rhea1-db0').ExecuteSelect(query=query)
+        result = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query=query)
         data = [row['product_id'] for row in result] if len(result) > 0 else []
         return {word: data}
 
     def fuzzy_search(self, word: str, web_id: str):
         query = f"""SELECT relate_article_id, word FROM fuzzy_search 
                     WHERE web_id = '{web_id}' AND word in ('{"','".join(list(word))}');"""
-        result = DBhelper('rhea1-db0').ExecuteSelect(query=query)
+        result = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query=query)
         data = list(set.intersection(*[set(row['relate_article_id'].split(',')) for row in result])) if len(
             result) > 0 else []
         data = self.sort_hot_rank(data=data, web_id=web_id)
@@ -74,14 +74,14 @@ class Recommend_engine:
     @staticmethod
     def fetch_similarity_data(product_id: str, web_id: str) -> list:
         query = f"""SELECT similarity_product_id FROM web_push.item_list WHERE web_id = '{web_id}' and main_product_id = '{product_id}';"""
-        data = DBhelper('rhea1-db0').ExecuteSelect(query=query)
+        data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query=query)
         product_ids = [row['similarity_product_id'] for row in data]
         return product_ids
 
     def fetch_data(self, product_ids: dict, web_id: str) -> dict:
         query = f"""SELECT product_id, title, description, url FROM web_push.item_list 
                     WHERE web_id = '{web_id}' and product_id in ('{"','".join(list(product_ids.keys()))}');"""
-        data = DBhelper('rhea1-db0').ExecuteSelect(query=query)
+        data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query=query)
 
         output = []
         # sub_domain = self.convert_subdomain(web_id)
