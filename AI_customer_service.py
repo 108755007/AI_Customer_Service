@@ -626,4 +626,4 @@ if __name__ == "__main__":
     #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('pure17', '哪一款比較推薦', ['123456aa4422']))
+    print(AI_customer_service.QA('AviviD', '聯絡人:江宗諭 電話:09050120 方便聯絡的時間:56599', ['123456aa4422']))
