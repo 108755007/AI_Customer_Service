@@ -224,8 +224,7 @@ class QA_api:
                                      model='gpt-4')
         if reply == 'timeout':
             return 'timeout'
-        try:
-            keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
 
         return keyword_list
 
