@@ -210,7 +210,7 @@ class QA_api:
     ## Search and Recommend
     def get_question_keyword(self, message: str, web_id: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$',
-                           '^如何$', '^賣$', '^有$', '^可以$', '^商品$', '^哪', '哪$', '有賣',
+                           '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦'}
         # remove web_id from message
         message = translation_stw(message).lower()
@@ -224,7 +224,9 @@ class QA_api:
                                      model='gpt-4')
         if reply == 'timeout':
             return 'timeout'
-        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+        try:
+            keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+
         return keyword_list
 
     def split_qa_url(self, result: list[dict], config: dict):
@@ -527,7 +529,7 @@ class QA_api:
         ####
         #types, orders = self.get_order_type(web_id, user_id, message)
         history_df = self.get_history_df(web_id, info)
-        continuity = self.check_message_continuity(history_df, message) if len(history_df) > 0 else False
+        #continuity = self.check_message_continuity(history_df, message) if len(history_df) > 0 else False
         continuity = False
         history = json.loads(history_df['q_a_history'].iloc[0]) if (len(history_df) > 0 and continuity) else []
         self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
