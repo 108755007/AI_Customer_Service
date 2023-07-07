@@ -618,7 +618,7 @@ class QA_api:
         self.update_history_df(web_id, info, history_df, message, answer, keyword, org_keyword_list, time.time()-start_time, gpt_query, continuity)
         self.update_recommend_status(web_id, user_id, 1, recommend_ans)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
-        return answer
+        return answer.replace('"',"'")
 
 
 if __name__ == "__main__":
