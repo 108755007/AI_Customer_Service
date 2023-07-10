@@ -28,7 +28,7 @@ class ChatGPT_AVD:
             # get token_id
             if 'gpt-4' in model:
                 query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
-                query = 'x WHERE id < 6'.join(query.split('x'))
+                #query = 'x WHERE id > 6'.join(query.split('x'))
                 token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
                 config = {'api_key': self.OPEN_AI_KEY_DICT[token_id],
                           'api_type': 'open_ai',
