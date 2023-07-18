@@ -218,6 +218,9 @@ class QA_api:
             message = re.sub(i, '', message)
             for j in list(jieba.cut(i)):
                 message = re.sub(j, '', message)
+
+        if message == '':
+            return 'no message'
         # segmentation
         reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': """I want you to act as a content analyzer for Chinese speaking users. You will segment the user's content into individual words, then assign a point value based on the importance of each word. If product names appear within the content, their scores should be doubled. Your responses should strictly follow this format: {"Word": Score}, and there should be no explanations within the responses"""},
                                       {'role': 'user', 'content': f'{message}'}],
@@ -510,6 +513,7 @@ class QA_api:
         if not self.check_message_length(message, 50):
             self.logger.print('USER ERROR: Input too long!', hash=hash_)
             return "親愛的顧客您好，您的提問長度超過限制，請縮短問題後重新發問。"
+
         ####上傳推薦狀態
         self.update_recommend_status(web_id,user_id,0)
         ####檢查是否為顧客資訊
@@ -567,6 +571,8 @@ class QA_api:
                 keyword_list = self.get_question_keyword(message, web_id)
                 if keyword_list == 'timeout':
                     return self.error('keyword_timeout', hash=hash_)
+                elif keyword_list == 'no message':
+                    return '親愛的顧客您好，請開始發問！'
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
                 keyword_list,org_keyword_list = self.check_keyword(keyword_list,self.ban_keyword.get(web_id))
 
@@ -606,7 +612,7 @@ class QA_api:
                 self.logger.print('ChatGPT輸出:\t', gpt_answer, hash=hash_)
                 answer = self.adjust_ans_format(gpt_answer)
                 answer, unused_links = self.adjust_ans_url_format(answer, links, self.CONFIG[web_id])
-                if web_id in {'AviviD', 'avividai'}:
+                if web_id in {'AviviD', 'avividai'} and len(history_df) == 0:
                     if not history:
                         recommend_ans = ''
                         answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
