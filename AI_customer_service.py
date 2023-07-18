@@ -219,7 +219,7 @@ class QA_api:
             for j in list(jieba.cut(i)):
                 message = re.sub(j, '', message)
 
-        if message == '':
+        if message.strip() == '':
             return 'no message'
         # segmentation
         reply = self.ChatGPT.ask_gpt([{'role': 'system', 'content': """I want you to act as a content analyzer for Chinese speaking users. You will segment the user's content into individual words, then assign a point value based on the importance of each word. If product names appear within the content, their scores should be doubled. Your responses should strictly follow this format: {"Word": Score}, and there should be no explanations within the responses"""},
@@ -227,6 +227,7 @@ class QA_api:
                                      model='gpt-4')
         if reply == 'timeout':
             return 'timeout'
+        ####TODO(yu):perhaps have problem
         keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
 
         return keyword_list
