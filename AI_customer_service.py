@@ -176,7 +176,7 @@ class QA_api:
         self.frontend = frontend
         self.auth = eval(os.getenv('SHORT_URL_TOKEN'))[0]
         self.token = eval(os.getenv('SHORT_URL_TOKEN'))[1]
-        self.ban_keyword = self.get_black_keyword()
+        #self.ban_keyword = self.get_black_keyword()
 
         if frontend == 'line':
             self.table_suffix = '_api'
@@ -567,7 +567,7 @@ class QA_api:
             elif continuity:
                 keyword_list = eval(history_df['keyword_list'].iloc[0])
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
-                keyword_list,org_keyword_list = self.check_keyword(keyword_list, self.ban_keyword.get(web_id))
+                #keyword_list,org_keyword_list = self.check_keyword(keyword_list, self.ban_keyword.get(web_id))
             else:
                 keyword_list = self.get_question_keyword(message, web_id)
                 if keyword_list == 'timeout':
@@ -575,7 +575,7 @@ class QA_api:
                 elif keyword_list == 'no message':
                     return '親愛的顧客您好，請開始發問！'
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
-                keyword_list,org_keyword_list = self.check_keyword(keyword_list,self.ban_keyword.get(web_id))
+                #keyword_list,org_keyword_list = self.check_keyword(keyword_list,self.ban_keyword.get(web_id))
 
             # Step 2: get gpt_query with search results from google search engine and likr recommend engine
             try:
@@ -622,7 +622,7 @@ class QA_api:
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
-        self.update_history_df(web_id, info, history_df, message, answer, keyword, org_keyword_list, time.time()-start_time, gpt_query, continuity)
+        self.update_history_df(web_id, info, history_df, message, answer, keyword, keyword_list, time.time()-start_time, gpt_query, continuity)
         self.update_recommend_status(web_id, user_id, 1, recommend_ans)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
         return answer.replace('"',"'")
