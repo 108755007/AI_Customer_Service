@@ -159,7 +159,7 @@ class AI_Search(QA_api):
         keyword_info = self.get_keyword_info(message)
         prodcut_info = self.get_product_info(web_id,keyword_info)
         query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
-        gpt_answer = self.ChatGPT.ask_gpt(query,Azure=False)
+        gpt_answer = self.ChatGPT.ask_gpt(query)
         ans = self.adjust_ans_format(gpt_answer)
         return ans,self.get_product_json(prodcut_info)
     def get_product_json(self,df):
