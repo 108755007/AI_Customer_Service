@@ -35,7 +35,7 @@ class AI_Search(QA_api):
 
     def get_product_rank_dict(self):
         query = f"""SELECT web_id,product_id,rank FROM web_push.all_hot_items x WHERE web_id in ('{"','".join(self.web_id_list)}')"""
-        Data = DBhelper('rhea1-db0').ExecuteSelect(query)
+        Data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query)
         rank_dict = {i: {} for i in self.web_id_list}
         for web_id, product_id, rank in Data:
             if product_id in rank_dict[web_id]:
@@ -72,7 +72,7 @@ class AI_Search(QA_api):
             query = f"""SELECT k.keyword,s.web_id,s.product_id,s.title,s.description,s.price,s.image_url From
             (SELECT article_id,keyword FROM web_push.keyword_article_list_no_utf8 x WHERE web_id ='{web_id}' and keyword = '{k}') as k INNER join (SELECT web_id,product_id ,title ,description ,price,image_url FROM web_push.item_list x WHERE web_id ='{web_id}') as s 
             on k.article_id = s.product_id"""
-            Data = DBhelper('rhea1-db0').ExecuteSelect(query)
+            Data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query)
             df = pd.DataFrame(Data)
             if len(df) != 0:
                 break
