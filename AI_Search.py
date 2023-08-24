@@ -159,7 +159,9 @@ class AI_Search(QA_api):
         query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
         gpt_answer = self.ChatGPT.ask_gpt(query,Azure=False)
         ans = self.adjust_ans_format(gpt_answer)
-        d ={}
-        for i,data in prodcut_info.iterrows():
-            d[i] = {'title':data['title'],'price':int(data['price']),'img_url':data['image_url'],'url':data['sub_url']}
-        return ans,d
+        return ans,self.get_product_json(prodcut_info)
+    def get_product_json(self,df):
+        json = {}
+        for i,data in df.iterrows():
+            json[i] = {'title':data['title'],'price':int(data['price']),'img_url':data['image_url'],'url':data['sub_url']}
+        return json
