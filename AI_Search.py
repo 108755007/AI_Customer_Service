@@ -167,8 +167,7 @@ class AI_Search(QA_api):
         query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
         gpt_answer = self.ChatGPT.ask_gpt(query)
         ans = self.adjust_ans_format(gpt_answer)
-        print(f'最終回答:{ans}')
-        return ans,product_josn
+        return {'res':ans,'product':product_josn}
     def get_product_json(self,df):
         json = {}
         for i,data in df.iterrows():
