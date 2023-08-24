@@ -23,10 +23,10 @@ class ChatGPT_AVD:
         self.AZURE_OPENAI_CONFIG = eval(os.getenv('AZURE_OPENAI_CONFIG'))
 
     def get_keys(func):
-        def inner(self, message, model="gpt-3.5-turbo", timeout=60):
+        def inner(self, message, model="gpt-3.5-turbo", timeout=60 ,Azure = True):
             config = self.AZURE_OPENAI_CONFIG
             # get token_id
-            if 'gpt-4' in model:
+            if 'gpt-4' in model or Azure == False:
                 query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
                 #query = 'x WHERE id > 6'.join(query.split('x'))
                 token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
