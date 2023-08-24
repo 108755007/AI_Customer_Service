@@ -156,12 +156,17 @@ class AI_Search(QA_api):
         self.chat_model = ChatOpenAI(temperature=0, model='gpt-4',openai_api_key=self.ChatGPT.OPEN_AI_KEY_DICT[1])
     def main(self,web_id,message):
         self.reset_openai()
+        print(f'客戶輸入:{message}')
         keyword_info = self.get_keyword_info(message)
+        print(keyword_info)
         prodcut_info = self.get_product_info(web_id,keyword_info)
+        product_josn = self.get_product_json(prodcut_info)
+        print(product_josn)
         query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
         gpt_answer = self.ChatGPT.ask_gpt(query)
         ans = self.adjust_ans_format(gpt_answer)
-        return ans,self.get_product_json(prodcut_info)
+        print(f'最終回答:{ans}')
+        return ans,product_josn
     def get_product_json(self,df):
         json = {}
         for i,data in df.iterrows():
