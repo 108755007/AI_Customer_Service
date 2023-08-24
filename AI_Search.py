@@ -155,7 +155,7 @@ class AI_Search(QA_api):
         )
         self.chat_model = ChatOpenAI(temperature=0, model='gpt-4',openai_api_key=self.ChatGPT.OPEN_AI_KEY_DICT[1])
     def main(self,web_id,message):
-        print(openai.api_type)
+        self.reset_openai()
         keyword_info = self.get_keyword_info(message)
         prodcut_info = self.get_product_info(web_id,keyword_info)
         query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
@@ -167,3 +167,8 @@ class AI_Search(QA_api):
         for i,data in df.iterrows():
             json[i] = {'title':data['title'],'price':int(data['price']),'img_url':data['image_url'],'url':data['sub_url']}
         return json
+
+    def reset_openai(self):
+        openai.api_type = 'open_ai'
+        openai.api_base = 'https://api.openai.com/v1'
+        openai.api_version = None
