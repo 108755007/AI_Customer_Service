@@ -86,18 +86,18 @@ class AI_Search(QA_api):
             if price_range.endswith('-'):
                 pri = price_range.split('-')[0]
                 df = df[(df['price'] >= int(pri))]
-                df = df.sort_values('price').reset_index(drop='index', ascending=False)
+                df = df.sort_values('price',ascending=False)
             elif price_range.startswith('-'):
                 pri = price_range.split('-')[0]
                 df = df[(df['price'] <= int(pri))]
-                df = df.sort_values('price').reset_index(drop='index')
+                df = df.sort_values('price')
             elif '-' in price_range:
                 pri = price_range.split('-')
                 df = df[(df['price']>=int(pri[0])) & (df['price'] <= int(pri[1]))]
-                df = df.sort_values('price').reset_index(drop='index',ascending = False)
+                df = df.sort_values('price',ascending=False)
         elif price != 'False':
             df = df[(df['price'] <= int(price))]
-            df = df.sort_values('price').reset_index(drop='index',ascending = False)
+            df = df.sort_values('price',ascending=False)
         return df.iloc[:n]
     def get_gpt_query_serch(self,df , message: str, web_id_conf: dict,web_id):
         '''
