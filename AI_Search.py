@@ -1,15 +1,13 @@
-
+import os
 from AI_customer_service import QA_api
 from utils.log import logger
 from db import DBhelper
 import pandas as pd
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from langchain.prompts import PromptTemplate
-from langchain.chat_models import ChatOpenAI
+from langchain.chat_models import AzureChatOpenAI
 import itertools
 import openai
-
-
 
 
 class AI_Search(QA_api):
@@ -18,7 +16,9 @@ class AI_Search(QA_api):
         self.get_web_id_list()
         self.all_subdomain_dict = self.get_sub_domain_dict()
         self.all_product_rank_dict = self.get_product_rank_dict()
-        self.langchain = self.get_langchain_setting()
+        self.Azure_openai_setting()
+        self.get_langchain_setting()
+
     def get_web_id_list(self):
         self.web_id_list = []
         for web_id,data in self.CONFIG.items():
@@ -155,9 +155,8 @@ class AI_Search(QA_api):
             input_variables=["question"],
             partial_variables={"format_instructions": format_instructions}
         )
-        self.chat_model = ChatOpenAI(temperature=0, model='gpt-4',openai_api_key=self.ChatGPT.OPEN_AI_KEY_DICT[1])
+        self.chat_model = AzureChatOpenAI(deployment_name="chat-cs-jp-4",temperature=0)
     def main(self,web_id,message):
-        self.reset_openai()
         print(f'客戶輸入:{message}')
         keyword_info = self.get_keyword_info(message)
         print(keyword_info)
@@ -174,7 +173,13 @@ class AI_Search(QA_api):
             json[i] = {'title':data['title'],'price':int(data['price']),'img_url':data['image_url'],'url':data['sub_url']}
         return json
 
-    def reset_openai(self):
-        openai.api_type = 'open_ai'
-        openai.api_base = 'https://api.openai.com/v1'
-        openai.api_version = None
+    def Azure_openai_setting(self):
+        os.environ['OPENAI_API_KEY'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
+        os.environ['OPENAI_API_TYPE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_type')
+        os.environ['OPENAI_API_BASE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_base')
+        os.environ['OPENAI_API_VERSION'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_version')
+
+
+if __name__ == "__main__":
+    Search = AI_Search()
+    print(Search.main('i3fresh','雞胸肉'))
