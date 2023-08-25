@@ -163,9 +163,12 @@ class AI_Search(QA_api):
         prodcut_info = self.get_product_info(web_id,keyword_info)
         product_json = self.get_product_json(prodcut_info)
         print(product_json)
-        query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
-        gpt_answer = self.ChatGPT.ask_gpt(query)
-        ans = self.adjust_ans_format(gpt_answer)
+        if not product_json:
+            ans = '很抱歉,目前查無商品,請更改價格區間或者更換商品搜尋'
+        else:
+            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
+            gpt_answer = self.ChatGPT.ask_gpt(query)
+            ans = self.adjust_ans_format(gpt_answer)
         return {'res':ans,'product':product_json}
     def get_product_json(self,df):
         json = {}
@@ -182,4 +185,4 @@ class AI_Search(QA_api):
 
 if __name__ == "__main__":
     Search = AI_Search()
-    print(Search.main('i3fresh','雞胸肉'))
+    print(Search.main('i3fresh','300到500的雞胸肉'))
