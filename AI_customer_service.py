@@ -25,8 +25,16 @@ class ChatGPT_AVD:
     def get_keys(func):
         def inner(self, message, model="gpt-3.5-turbo", timeout=60 ,Azure = True):
             config = self.AZURE_OPENAI_CONFIG
+            if model == "gpt-4":
+                model_name = 'chat-cs-jp-4'
+            elif model == "gpt-3.5-turbo-16k":
+                model_name = "chat-cs-jp-35-16k"
+            elif model == "gpt-4-32k":
+                model_name = "chat-cs-jp-4-32k"
+            else:
+                model_name = "chat-cs-jp-35"
             # get token_id
-            if 'gpt-4' in model or Azure == False:
+            if not Azure:
                 query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
                 #query = 'x WHERE id > 6'.join(query.split('x'))
                 token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
@@ -39,22 +47,22 @@ class ChatGPT_AVD:
                 DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
 
             try:
-                res = func_timeout(timeout, func, (self, message, config))
+                res = func_timeout(timeout, func, (self, message, config , model_name))
             except:
                 res = 'timeout'
 
-            if 'gpt-4' in model:
+            if not Azure:
                 DBhelper('jupiter_new').ExecuteDelete(f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
             return res
         return inner
 
     @get_keys
-    def ask_gpt(self, message: str, config: dict) -> str:
+    def ask_gpt(self, message: str, config: dict, model:str) -> str:
         openai.api_key = config.get('api_key')
         openai.api_type = config.get('api_type')
         openai.api_base = config.get('api_base')
         openai.api_version = config.get('api_version')
-        kwargs = config.get('kwargs')
+        kwargs = {'engine': model}
         kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
         completion = openai.ChatCompletion.create(**kwargs)
         return completion['choices'][0]['message']['content']
