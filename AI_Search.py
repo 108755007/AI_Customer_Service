@@ -27,13 +27,11 @@ class AI_Search(QA_api):
     def get_sub_domain_dict(self):
         if 'nineyi000360' in self.web_id_list:
             self.web_id_list.append('famimarketing')
-            self.web_id_list.append('familyapp')
         query = f"""SELECT web_id,subdomain  FROM web_push.all_website_category x WHERE web_id in ('{"','".join(self.web_id_list)}')"""
         Data = DBhelper('sunscribe').ExecuteSelect(query)
         sub_domain_dict = {web_id: subdomain for web_id, subdomain in Data}
         if 'famimarketing' in sub_domain_dict:
             sub_domain_dict['nineyi000360'] = sub_domain_dict['famimarketing']
-            sub_domain_dict['familyapp'] = sub_domain_dict['famimarketing']
         return sub_domain_dict
 
     def get_product_rank_dict(self):
@@ -41,6 +39,8 @@ class AI_Search(QA_api):
         Data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query)
         rank_dict = {i: {} for i in self.web_id_list}
         for web_id, product_id, rank in Data:
+            if web_id in ['familyapp','famimarketing']:
+                web_id = 'nineyi000360'
             if product_id in rank_dict[web_id]:
                 continue
             rank_dict[web_id][product_id] = rank
@@ -54,6 +54,8 @@ class AI_Search(QA_api):
 
     def get_rank(self,web_id, product_id):
         rank_dict = self.all_product_rank_dict.get(web_id)
+        if not rank_dict:
+            return 999
         rank = rank_dict.get(product_id)
         if not rank:
             return 999
@@ -73,16 +75,18 @@ class AI_Search(QA_api):
         price_range = keyword_info.get('price_range')
         for k in Fuzzy_keyword:
             query = f"""SELECT k.keyword,s.web_id,s.product_id,s.title,s.description,s.price,s.image_url From
-            (SELECT article_id,keyword FROM web_push.keyword_article_list_no_utf8 x WHERE web_id ='{web_id}' and keyword = '{k}') as k INNER join (SELECT web_id,product_id ,title ,description ,price,image_url FROM web_push.item_list x WHERE web_id ='{web_id}') as s 
+            (SELECT article_id,keyword FROM web_push.keyword_article_list_no_utf8 x WHERE web_id = '{web_id}' and keyword = '{k}') as k INNER join (SELECT web_id,product_id ,title ,description ,price,image_url FROM web_push.item_list x WHERE web_id = '{web_id}') as s 
             on k.article_id = s.product_id"""
+            if web_id == 'nineyi000360':
+                query = query.replace("web_id = 'nineyi000360'","""web_id in ("nineyi000360","familyapp","famimarketing")""")
             Data = DBhelper('rhea1-db0',is_ssh=True).ExecuteSelect(query)
             df = pd.DataFrame(Data)
             if len(df) != 0:
                 break
         if len(df) == 0:
             return df
-        df['sub_url'] = df.apply(lambda x: self.get_subdomain_url(x.web_id, x.product_id), axis=1)
-        df['rank'] = df.apply(lambda x: self.get_rank(x.web_id, x.product_id), axis=1)
+        df['sub_url'] = df.apply(lambda x: self.get_subdomain_url(x.web_id if x.web_id  not in ['familyapp','famimarketing'] else 'nineyi000360' ,x.product_id), axis=1)
+        df['rank'] = df.apply(lambda x: self.get_rank(x.web_id if x.web_id  not in ['familyapp','famimarketing'] else 'nineyi000360', x.product_id), axis=1)
         df = df.sort_values('rank').reset_index(drop='index')
         if price_range != 'False':
             if price_range.endswith('-'):
@@ -168,7 +172,7 @@ class AI_Search(QA_api):
         if not product_json:
             ans = '很抱歉,目前查無商品,請更改價格區間或者更換商品搜尋'
         else:
-            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id) if web_id != 'familyapp' else self.get_gpt_query_serch(prodcut_info,message,self.CONFIG['nineyi000360'],web_id)
+            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
             gpt_answer = self.ChatGPT.ask_gpt(query)
             ans = self.adjust_ans_format(gpt_answer)
         return {'res':ans,'product':product_json}
@@ -187,4 +191,4 @@ class AI_Search(QA_api):
 
 if __name__ == "__main__":
     Search = AI_Search()
-    print(Search.main('familyapp','悠遊卡'))
+    print(Search.main('i3fresh','有沒有賣1000以下的雞胸肉'))
