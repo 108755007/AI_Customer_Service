@@ -27,11 +27,13 @@ class AI_Search(QA_api):
     def get_sub_domain_dict(self):
         if 'nineyi000360' in self.web_id_list:
             self.web_id_list.append('famimarketing')
+            self.web_id_list.append('familyapp')
         query = f"""SELECT web_id,subdomain  FROM web_push.all_website_category x WHERE web_id in ('{"','".join(self.web_id_list)}')"""
         Data = DBhelper('sunscribe').ExecuteSelect(query)
         sub_domain_dict = {web_id: subdomain for web_id, subdomain in Data}
         if 'famimarketing' in sub_domain_dict:
             sub_domain_dict['nineyi000360'] = sub_domain_dict['famimarketing']
+            sub_domain_dict['familyapp'] = sub_domain_dict['famimarketing']
         return sub_domain_dict
 
     def get_product_rank_dict(self):
@@ -166,7 +168,7 @@ class AI_Search(QA_api):
         if not product_json:
             ans = '很抱歉,目前查無商品,請更改價格區間或者更換商品搜尋'
         else:
-            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
+            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id) if web_id != 'familyapp' else self.get_gpt_query_serch(prodcut_info,message,self.CONFIG['nineyi000360'],web_id)
             gpt_answer = self.ChatGPT.ask_gpt(query)
             ans = self.adjust_ans_format(gpt_answer)
         return {'res':ans,'product':product_json}
@@ -185,4 +187,4 @@ class AI_Search(QA_api):
 
 if __name__ == "__main__":
     Search = AI_Search()
-    print(Search.main('i3fresh','300到500的雞胸肉'))
+    print(Search.main('familyapp','悠遊卡'))
