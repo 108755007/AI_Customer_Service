@@ -8,6 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chat_models import AzureChatOpenAI
 import itertools
 import openai
+import re
 
 
 class AI_Search(QA_api):
@@ -175,6 +176,7 @@ class AI_Search(QA_api):
             query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
             gpt_answer = self.ChatGPT.ask_gpt(query)
             ans = self.adjust_ans_format(gpt_answer)
+            ans = re.sub('\w*(抱歉|對不起|我們沒有)\w*(，|。)','',ans)
         return {'res':ans,'product':product_json}
     def get_product_json(self,df):
         json = {}
