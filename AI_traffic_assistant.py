@@ -13,7 +13,7 @@ from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from langchain.prompts import PromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain.llms import OpenAI
 from langchain.chains import LLMChain
-from lanchain_class import title_1,title_5
+from lanchain_class import title_1,title_5,sub_title
 from langchain.chat_models import ChatOpenAI,AzureChatOpenAI
 import json
 import os
@@ -85,6 +85,8 @@ class Util(QA_api):
     def title_model_setting(self):
         output_parser_1 = PydanticOutputParser(pydantic_object=title_1)
         output_parser_5 = PydanticOutputParser(pydantic_object=title_5)
+        output_parser_sub = PydanticOutputParser(pydantic_object=sub_title)  # 用于对输出格式化
+        format_instructions_sub = output_parser_sub.get_format_instructions()
         format_instructions_1 = output_parser_1.get_format_instructions()
         format_instructions_5 = output_parser_5.get_format_instructions()
         template_1 = """
@@ -107,7 +109,14 @@ class Util(QA_api):
         -----
         {format_instructions}
         """
+        template_sub = """
+        請從主標題,生成與該主題相關的5個副標題
 
+        主標題:{title}
+
+        -----
+        {format_instructions}
+        """
         prompt_1 = PromptTemplate(  # 设置prompt模板，用于格式化输入
             template=template_1,
             input_variables=["keyword_info"],
@@ -118,8 +127,14 @@ class Util(QA_api):
             input_variables=["keyword_info"],
             partial_variables={"format_instructions": format_instructions_5}
         )
+        prompt_sub = PromptTemplate(  # 设置prompt模板，用于格式化输入
+            template=template_sub,
+            input_variables=["title"],
+            partial_variables={"format_instructions": format_instructions_sub}
+        )
         self.title_chain_1 = LLMChain(prompt=prompt_1,llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4",temperature=0),output_parser=output_parser_1)
         self.title_chain_5 = LLMChain(prompt=prompt_5, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0),output_parser=output_parser_5)
+        self.title_chain_sub = LLMChain(prompt=prompt_sub,llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0),output_parser=output_parser_sub)
     def Azure_openai_setting(self):
         os.environ['OPENAI_API_KEY'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
         os.environ['OPENAI_API_TYPE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_type')
@@ -203,6 +218,26 @@ class AI_traffic(Util):
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, self.translation_stw(result.title[0]),self.translation_stw(result.title[1]), self.translation_stw(result.title[2]),self.translation_stw(result.title[3]), self.translation_stw(result.title[4]),article, 2]],
                                                        columns=['user_id', 'web_id', 'type', 'inputs', 'subheading_1','subheading_2', 'subheading_3', 'subheading_4','subheading_5', 'article_1', 'article_step']),db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
             return result.title
+    def get_sub_title(self,title:str='',user_id:str='',web_id:str='test',types:int=1):
+        result = self.title_chain_1.run({'title': title})
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, title, result.sub_title[0], result.sub_title[1], result.sub_title[2], result.sub_title[3], result.sub_title[4]]],columns=['user_id', 'web_id', 'type', 'title', 'subheading_1', 'subheading_2', 'subheading_3','subheading_4', 'subheading_5']), db='sunscribe', table='ai_article', chunk_size=100000,is_ssh=False)
+        return {i+1:v for i,v in enumerate(result.sub_title)}
+
+    def generate_articles(self):
+        pass
+    def generate_articles_TA(self,title: str = '', subtitles1: str = '', subtitles2: str = '', subtitles3: str = '',
+                                 subtitles4: str = '', subtitles5: str = '', keywords: str = '', user_id: str = '',
+                                 web_id: str = 'test', types: int = 1, gender: str = '', age: str = '',
+                                 Income: str = '', style: str = '', interests: str = '', occupation: str = ''):
+        query = f"SELECT keyword_dict  FROM web_push.ai_article WHERE web_id = '{web_id}' and user_id  ='{user_id}'"
+        keyword_dict = DBhelper('sunscribe').ExecuteSelect(query)
+        sub_count = 1
+        short = False
+        if not subtitles1 and not subtitles2 and not subtitles3 and not subtitles4 and not subtitles5:
+            short = True
+
+
+        pass
 
 if __name__ == "__main__":
     AI_traffic = AI_traffic()

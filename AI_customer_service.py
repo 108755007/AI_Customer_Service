@@ -136,6 +136,8 @@ class ChatGPT_AVD:
         links = []
         if type(result) != str:
             chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, use bullet points for each different subject, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions or any information about pricing.\n Information:"""
+            if web_id_conf['web_id'] in {'AviviD', 'avividai'}:
+                chatgpt_query.replace("親愛的顧客您好，",'親愛的顧客您好，我是小禾您的客服機器人，感謝您對禾多移動的關注！')
             for i, v in enumerate(result):
                 if not v.get('link'):
                     continue

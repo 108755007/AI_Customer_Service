@@ -7,3 +7,6 @@ class title_1(BaseModel):
 
 class title_5(BaseModel):
     title: list = Field(description="list of title of data")
+
+class sub_title(BaseModel):
+    sub_title: list = Field(description="list of sub-title of data")
