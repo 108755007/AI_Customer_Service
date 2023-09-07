@@ -35,10 +35,10 @@ AI_traffic = AiTraffic()
 
 
 @app.get("/title", tags=["generate_title"])
-def title(web_id: str = 'test', user_id: str = '', keyword: str = '',web_id_main: str = '', article: str = '', types: int = 1):
+def title(web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = '', types: int = 1):
     if types != 1 and article =='':
         return '請輸入文章內容'
-    return AI_traffic.get_title(web_id=web_id, user_id=user_id, keywords=keyword, web_id_main=web_id_main, article=article, types=types)
+    return AI_traffic.get_title(web_id=web_id, user_id=user_id, keywords=keywords, web_id_main=web_id_main, article=article, types=types)
 
 @app.get("/sub-heading", tags=["generate_sub_title"])
 def subtitle(web_id: str = 'test', user_id: str = '', title: str = '', types: int = 1):
