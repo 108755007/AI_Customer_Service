@@ -171,7 +171,7 @@ class Util(QA_api):
             retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model)
             gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         if not sub_list:
-            res = [gpt_res['paragraph'].replace(title, '')]
+            res = [gpt_res['Articles'].replace(title, '')]
         else:
             res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
         return res
