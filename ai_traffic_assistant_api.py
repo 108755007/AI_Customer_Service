@@ -60,3 +60,8 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
     return AI_traffic.generate_articles(title=title, keywords=keywords, user_id=user_id, web_id=web_id, types=types,
                                         subtitle_list=[subtitles1, subtitles2, subtitles3, subtitles4, subtitles5],
                                         ta=[gender, age, Income, interests, occupation, style])
+
+@app.get("/check", tags=["check"])
+def checkdef(test: str = ''):
+    if test:
+        return True
