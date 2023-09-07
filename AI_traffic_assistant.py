@@ -29,7 +29,7 @@ class Util(QA_api):
         self.langchain_model_setting()
         self.chat_check_model = AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0)
         self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35')
-
+        self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-4')
     def get_data_intdate(self, time_delay):
         return int(str(datetime.date.today()-datetime.timedelta(time_delay)).replace('-', ''))
 
@@ -153,14 +153,16 @@ class Util(QA_api):
 
     def get_article(self, prompt, title, sub_list):
         if not sub_list:
-            response_schemas = [ResponseSchema(name=f"paragraph", description=f"Articles with {title}")]
+            response_schemas = [ResponseSchema(name=f"Articles", description=f"Articles")]
+            model = self.article_4_model
         else:
             response_schemas = [ResponseSchema(name=f"paragraph_{i+1}", description=f"Articles with subtitle '{v}'") for i,v in enumerate(sub_list)]
+            model = self.article_model
         output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = output_parser.get_format_instructions()
         _input = ChatPromptTemplate(messages=[HumanMessagePromptTemplate.from_template("{question}\n{format_instructions}\n")],
                                     input_variables=["question"], partial_variables={"format_instructions": format_instructions}).format_prompt(question=prompt)
-        output = self.article_model(_input.to_messages())
+        output = model(_input.to_messages())
         # noinspection PyBroadException
         try:
             gpt_res = output_parser.parse(output.content)
