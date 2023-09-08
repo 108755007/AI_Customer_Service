@@ -156,7 +156,7 @@ class Util(QA_api):
             response_schemas = [ResponseSchema(name=f"Articles", description=f"Articles")]
             model = self.article_4_model
         else:
-            response_schemas = [ResponseSchema(name=f"paragraph_{i+1}", description=f"Articles with subtitle '{v}'") for i,v in enumerate(sub_list)]
+            response_schemas = [ResponseSchema(name=f"paragraph_{i+1}", description=f"Articles with subtitle '{v}'") for i, v in enumerate(sub_list)]
             model = self.article_model
         output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = output_parser.get_format_instructions()
@@ -287,8 +287,9 @@ class AiTraffic(Util):
         prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
         if types == 1:
             result = self.title_chain_1.run({'keyword_info': prompt})
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, self.translation_stw(result.title), json.dumps([{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for keyword, data in keyword_info_dict.items()])]],columns=['user_id', 'web_id', 'type', 'inputs', 'title', 'keyword_dict']), db='sunscribe',table='ai_article', chunk_size=100000, is_ssh=False)
-            return [result.title]
+            title = self.translation_stw(result.title)
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps([{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for keyword, data in keyword_info_dict.items()])]],columns=['user_id', 'web_id', 'type', 'inputs', 'title', 'keyword_dict']), db='sunscribe',table='ai_article', chunk_size=100000, is_ssh=False)
+            return [title]
         else:
             if not article:
                 return {"message": "no article input"}
