@@ -171,7 +171,7 @@ class Util(QA_api):
             retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model)
             gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         if not sub_list:
-            res = [gpt_res['Articles'].replace(title, '')]
+            res = [gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace('文章內容:', '')]
         else:
             res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
         return res
@@ -319,12 +319,6 @@ class AiTraffic(Util):
         prompt = self.get_generate_articles_prompt(title, sub_list, keyword_info_dict, ta)
         res = self.get_article(prompt, title, sub_list)
         print(f"""產生的文章內容:\n{res}""")
-        if len(res) == 1:
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, res[0]]], columns=['user_id', 'web_id', 'type', 'article_1']), db='sunscribe', table='ai_article',chunk_size=100000, is_ssh=False)
-        if len(res) == 3:
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, res[0], res[1], res[2]]], columns=['user_id', 'web_id', 'type', 'article_1', 'article_2', 'article_3']), db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
-        elif len(res) == 5:
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, res[0], res[1], res[2], res[3], res[4]]], columns=['user_id', 'web_id', 'type', 'article_1', 'article_2', 'article_3', 'article_4', 'article_5']), db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
         return res
 
 

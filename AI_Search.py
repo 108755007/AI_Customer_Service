@@ -69,6 +69,19 @@ class AI_Search(QA_api):
             for j in itertools.combinations(keyword_list, i):
                 keyword_combination.append(j)
         return [''.join(i) for i in keyword_combination]
+    def get_hot_product_info(self,web_id):
+        query = f"""SELECT s.web_id,s.product_id,s.title,s.url,s.image_url,k.rank From 
+        (SELECT product_id,rank FROM web_push.all_hot_items WHERE web_id = '{web_id}' order by rank limit 10 ) as k INNER join (SELECT web_id,product_id ,title ,url,image_url FROM web_push.item_list x WHERE web_id = '{web_id}') as s 
+        on k.product_id = s.product_id"""
+        df = pd.DataFrame(DBhelper('rhea1-db0', is_ssh=True).ExecuteSelect(query)).sample(3).reset_index()
+        json = {}
+        for i, data in df.iterrows():
+            json[i] = {'title': data['title'], 'url': data['url'], 'img_url': data['image_url']}
+        return json
+
+
+
+
     def get_product_info(self,web_id, keyword_info,n=3):
         keyword = keyword_info.get('keyword')
         Fuzzy_keyword = self.get_Fuzzy_keyword(keyword)
@@ -177,7 +190,8 @@ class AI_Search(QA_api):
             gpt_answer = self.ChatGPT.ask_gpt(query)
             ans = self.adjust_ans_format(gpt_answer)
             ans = re.sub('\w*(抱歉|對不起|我們沒有)\w*(，|。)','',ans)
-        return {'res':ans,'product':product_json}
+        hot_product_json = self.get_hot_product_info(web_id)
+        return {'res': ans, 'product': product_json, 'hot': hot_product_json}
     def get_product_json(self,df):
         json = {}
         for i,data in df.iterrows():
@@ -193,4 +207,4 @@ class AI_Search(QA_api):
 
 if __name__ == "__main__":
     Search = AI_Search()
-    print(Search.main('i3fresh','有沒有賣1000以下的雞胸肉'))
+    print(Search.main('i3fresh','好吃'))
