@@ -1,4 +1,6 @@
 import os
+import time
+
 from AI_customer_service import QA_api
 from utils.log import logger
 from db import DBhelper
@@ -78,7 +80,20 @@ class AI_Search(QA_api):
         for i, data in df.iterrows():
             json[i] = {'title': data['title'], 'url': data['url'], 'img_url': data['image_url']}
         return json
-
+    def get_similar_info(self,web_id,product_id_list):
+        for i in product_id_list:
+            query = f"""SELECT s.title,s.url,s.image_url From 
+                        (SELECT DISTINCT similarity_product_id FROM web_push.item_similarity_table x WHERE web_id ='{web_id}' and  main_product_id ='{i}' and similarity_product_id not in ('{"','".join(product_id_list)}') order by rank limit 3) as k 
+                    INNER join (SELECT web_id,product_id ,title ,url,image_url FROM web_push.item_list x WHERE web_id = '{web_id}') as s
+                    on k.similarity_product_id = s.product_id
+                    """
+            df = pd.DataFrame(DBhelper('rhea1-db0', is_ssh=True).ExecuteSelect(query))
+            if len(df) != 0:
+                break
+        json = {}
+        for i, data in df.iterrows():
+            json[i] = {'title': data['title'], 'url': data['url'], 'img_url': data['image_url']}
+        return json
 
 
 
@@ -192,6 +207,24 @@ class AI_Search(QA_api):
             ans = re.sub('\w*(抱歉|對不起|我們沒有)\w*(，|。)','',ans)
         hot_product_json = self.get_hot_product_info(web_id)
         return {'res': ans, 'product': product_json, 'hot': hot_product_json}
+    def main_sim(self,web_id,message):
+        print(f'客戶輸入:{message}')
+        keyword_info = self.get_keyword_info(message)
+        print(keyword_info)
+        prodcut_info = self.get_product_info(web_id,keyword_info)
+        product_json = self.get_product_json(prodcut_info)
+        print(product_json)
+        if not product_json:
+            ans = '很抱歉,目前查無商品,請更改價格區間或者更換商品搜尋'
+        else:
+            query = self.get_gpt_query_serch(prodcut_info,message,self.CONFIG[web_id],web_id)
+            gpt_answer = self.ChatGPT.ask_gpt(query)
+            ans = self.adjust_ans_format(gpt_answer)
+            ans = re.sub('\w*(抱歉|對不起|我們沒有)\w*(，|。)','',ans)
+        sim_product_json = self.get_similar_info(web_id,list(prodcut_info['product_id']))
+        return {'res': ans, 'product': product_json, 'hot': sim_product_json}
+
+
     def get_product_json(self,df):
         json = {}
         for i,data in df.iterrows():
@@ -207,4 +240,10 @@ class AI_Search(QA_api):
 
 if __name__ == "__main__":
     Search = AI_Search()
-    print(Search.main('i3fresh','好吃'))
+    start = time.time()
+    print(Search.main('nineyi000360','衛生紙'))
+    end = time.time()
+    print(f'熱銷品執行時間{end-start}')
+    print(Search.main_sim('nineyi000360', '衛生紙'))
+    end2 = time.time()
+    print(f'類品執行時間{end2 - end}')
