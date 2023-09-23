@@ -55,6 +55,13 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
     columns = ['user_id', 'web_id', 'type']
     update_data = [user_id, web_id, types]
     d = 0
+    if not subtitles1 and not subtitles2 and not subtitles3 and not subtitles4 and not subtitles5:
+        columns.append('article_1')
+        update_data.append(res[0])
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
+                                        columns=columns), db='sunscribe', table='ai_article',
+                                      chunk_size=100000, is_ssh=False)
+        return
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
             columns.append(f"article_{i+1}")
@@ -74,6 +81,12 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
                                        ta=[gender, age, Income, interests, occupation, style])
     columns = ['user_id', 'web_id', 'type']
     update_data = [user_id, web_id, types]
+    if not subtitles1 and not subtitles2 and not subtitles3 and not subtitles4 and not subtitles5:
+        columns.append('article_1')
+        update_data.append(res[0])
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],columns=columns), db='sunscribe', table='ai_article',
+                                      chunk_size=100000, is_ssh=False)
+        return
     d = 0
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
