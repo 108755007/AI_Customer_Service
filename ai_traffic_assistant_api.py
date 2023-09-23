@@ -61,7 +61,7 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
         DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                         columns=columns), db='sunscribe', table='ai_article',
                                       chunk_size=100000, is_ssh=False)
-        return
+        return res
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
             columns.append(f"article_{i+1}")
@@ -70,7 +70,7 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
     DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                                columns=columns), db='sunscribe', table='ai_article',
                                   chunk_size=100000, is_ssh=False)
-    return
+    return res
 
 @app.get("/articles_ta_2", tags=["generate_articles_TA"])
 def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywords: str = '', subtitles1: str = '',
@@ -86,7 +86,7 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
         update_data.append(res[0])
         DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],columns=columns), db='sunscribe', table='ai_article',
                                       chunk_size=100000, is_ssh=False)
-        return
+        return res
     d = 0
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
@@ -96,7 +96,7 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
     DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                                columns=columns), db='sunscribe', table='ai_article',
                                   chunk_size=100000, is_ssh=False)
-    return
+    return res
 
 @app.get("/check", tags=["check"])
 def checkdef(test: str = ''):
