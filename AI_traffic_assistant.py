@@ -35,7 +35,7 @@ class Util(QA_api):
 
     def get_web_id(self):
         qurey = f"""SELECT web_id,web_id_type FROM missoner_web_id_table WHERE ai_article_enable = 1 """
-        web_id_list = DBhelper('dione').ExecuteSelect(qurey)
+        web_id_list = DBhelper('dione',is_ssh=True).ExecuteSelect(qurey)
         return {i: v for i, v in web_id_list}
 
     def get_media_keyword_data(self):
@@ -49,7 +49,7 @@ class Util(QA_api):
                 WHERE `date` > {self.dateint} ) t 
         ON k.article_id = t.article_id ORDER BY t.pageviews desc;
         """
-        data = DBhelper('dione').ExecuteSelect(query)
+        data = DBhelper('dione',is_ssh=True).ExecuteSelect(query)
         return pd.DataFrame(data).drop_duplicates(['keyword', 'title'])
 
     def get_keyword_data(self, web_id):
@@ -66,7 +66,7 @@ class Util(QA_api):
             query += f""" `date` > {self.dateint} and"""
         query += f""" web_id = '{web_id}') t 
                     ON k.article_id = t.article_id ORDER BY t.pageviews desc;"""
-        data = DBhelper('dione').ExecuteSelect(query)
+        data = DBhelper('dione',is_ssh=True).ExecuteSelect(query)
         return pd.DataFrame(data).drop_duplicates(['keyword', 'title'])
 
     def langchain_model_setting(self):

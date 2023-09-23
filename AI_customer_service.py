@@ -644,4 +644,4 @@ if __name__ == "__main__":
     #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('magiplanet', '你們有賣什麼', ['123456aa4422']))
+    print(AI_customer_service.QA('magiplanet', '如何退貨', ['123456aa4422']))
