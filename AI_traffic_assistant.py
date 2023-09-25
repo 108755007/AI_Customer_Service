@@ -16,7 +16,7 @@ from lanchain_class import title_1, title_5, sub_title
 from langchain.chat_models import AzureChatOpenAI
 import json
 import os
-
+import random
 
 class Util(QA_api):
     def __init__(self):
@@ -236,6 +236,7 @@ class AiTraffic(Util):
         keyword_list = keyword.split(',')
         df = self.all_keyword_pd[web_id]
         keyword_info_dict = {}
+        visited = []
         print(keyword_list)
         for key in keyword_list:
             if key in set(df.keyword):
@@ -251,7 +252,18 @@ class AiTraffic(Util):
                         keyword_info_dict[key] = (title,content, web_id_article, article_id, img)
                         break
             else:
-                html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={key}'
+                if len(keyword_list) > 2:
+                    while True:
+                        r = random.choice(keyword_list)
+                        if set([key, r]) in visited or r == key:
+                            continue
+                        visited.append(set([key, r]))
+                        search_key = f'{key}+{r}'
+                        print(f'google搜尋的關鍵字{search_key}')
+                        break
+                else:
+                    search_key = key
+                html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={search_key}'
                 r = requests.get(html)
                 if r.status_code != 200:
                     continue
