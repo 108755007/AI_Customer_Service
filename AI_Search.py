@@ -186,7 +186,7 @@ class AI_Search(QA_api):
         self.output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = self.output_parser.get_format_instructions()
         self.prompt = PromptTemplate(
-            template="the most important keyword.\n{format_instructions}\n{question}",
+            template="the most important keyword.'元' and '塊' means $\n{format_instructions}\n{question}",
             input_variables=["question"],
             partial_variables={"format_instructions": format_instructions}
         )
@@ -241,9 +241,9 @@ class AI_Search(QA_api):
 if __name__ == "__main__":
     Search = AI_Search()
     start = time.time()
-    print(Search.main('nineyi000360','衛生紙'))
+    print(Search.main('nineyi000360','500元以上的馬克杯'))
     end = time.time()
     print(f'熱銷品執行時間{end-start}')
-    print(Search.main_sim('nineyi000360', '衛生紙'))
+    #print(Search.main_sim('nineyi000360', '衛生紙'))
     end2 = time.time()
     print(f'類品執行時間{end2 - end}')
