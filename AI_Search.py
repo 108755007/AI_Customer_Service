@@ -100,8 +100,8 @@ class AI_Search(QA_api):
     def get_product_info(self,web_id, keyword_info,n=3):
         keyword = keyword_info.get('keyword')
         Fuzzy_keyword = self.get_Fuzzy_keyword(keyword)
-        price = keyword_info.get('price')
-        price_range = keyword_info.get('price_range')
+        price = keyword_info.get('price').reaplce('元', '').replace('塊', '')
+        price_range = keyword_info.get('price_range').reaplce('元', '').replace('塊', '')
         for k in Fuzzy_keyword:
             query = f"""SELECT k.keyword,s.web_id,s.product_id,s.title,s.description,s.price,s.image_url From
             (SELECT article_id,keyword FROM web_push.keyword_article_list_no_utf8 x WHERE web_id = '{web_id}' and keyword = '{k}') as k INNER join (SELECT web_id,product_id ,title ,description ,price,image_url FROM web_push.item_list x WHERE web_id = '{web_id}') as s 
