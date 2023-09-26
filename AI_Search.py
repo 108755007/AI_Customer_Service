@@ -100,8 +100,9 @@ class AI_Search(QA_api):
     def get_product_info(self,web_id, keyword_info,n=3):
         keyword = keyword_info.get('keyword')
         Fuzzy_keyword = self.get_Fuzzy_keyword(keyword)
-        price = keyword_info.get('price').reaplce('元', '').replace('塊', '')
-        price_range = keyword_info.get('price_range').reaplce('元', '').replace('塊', '')
+        price = keyword_info.get('price').replace('元', '').replace('塊', '')
+        price_range = keyword_info.get('price_range').replace('元', '').replace('塊', '')
+        price_sorting = keyword_info.get('price_sorting')
         for k in Fuzzy_keyword:
             query = f"""SELECT k.keyword,s.web_id,s.product_id,s.title,s.description,s.price,s.image_url From
             (SELECT article_id,keyword FROM web_push.keyword_article_list_no_utf8 x WHERE web_id = '{web_id}' and keyword = '{k}') as k INNER join (SELECT web_id,product_id ,title ,description ,price,image_url FROM web_push.item_list x WHERE web_id = '{web_id}') as s 
@@ -116,12 +117,17 @@ class AI_Search(QA_api):
             return df
         df['sub_url'] = df.apply(lambda x: self.get_subdomain_url(x.web_id if x.web_id  not in ['familyapp','famimarketing'] else 'nineyi000360' ,x.product_id), axis=1)
         df['rank'] = df.apply(lambda x: self.get_rank(x.web_id if x.web_id  not in ['familyapp','famimarketing'] else 'nineyi000360', x.product_id), axis=1)
+        if price_sorting and price_sorting != 'None':
+            if price_sorting == 'True':
+                df = df.sort_values('price').reset_index(drop='index')
+            else:
+                df = df.sort_values('price', ascending=False).reset_index(drop='index')
         df = df.sort_values('rank').reset_index(drop='index')
         if price_range != 'False':
             if price_range.endswith('-'):
                 pri = price_range.split('-')[0]
                 df = df[(df['price'] >= int(pri))]
-                df = df.sort_values('price',ascending=False).reset_index(drop='index')
+                df = df.sort_values('price',ascending=True).reset_index(drop='index')
             elif price_range.startswith('-'):
                 pri = price_range.split('-')[0]
                 df = df[(df['price'] <= int(pri))]
@@ -129,7 +135,7 @@ class AI_Search(QA_api):
             elif '-' in price_range:
                 pri = price_range.split('-')
                 df = df[(df['price']>=int(pri[0])) & (df['price'] <= int(pri[1]))]
-                df = df.sort_values('price',ascending=False).reset_index(drop='index')
+                df = df.sort_values('price',ascending=True).reset_index(drop='index')
         elif price != 'False':
             df = df[(df['price'] <= int(price))]
             df = df.sort_values('price',ascending=False).reset_index(drop='index')
@@ -182,11 +188,12 @@ class AI_Search(QA_api):
     def get_langchain_setting(self):
         response_schemas = [ResponseSchema(name="keyword", description="Most important product titles or keywords"),
                             ResponseSchema(name="price",description='If the question ask for price,return the price else return "False"'),
-                            ResponseSchema(name="price_range",description='If the question ask for price range,return the price range which sep by "-" else return "False"')]
+                            ResponseSchema(name="price_range",description='If the question ask for price range,return the price range which sep by "-" else return "False"'),
+                            ResponseSchema(name="price_sorting",description='If you ask for the cheapest return "True", if you ask for the most expensive return "False". else return "None"')]
         self.output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = self.output_parser.get_format_instructions()
         self.prompt = PromptTemplate(
-            template="the most important keyword.'元' and '塊' means $\n{format_instructions}\n{question}",
+            template="You are a robot that determines the products and prices of customer problems.'元' and '塊' means $\n{format_instructions}\n{question}",
             input_variables=["question"],
             partial_variables={"format_instructions": format_instructions}
         )
@@ -241,7 +248,7 @@ class AI_Search(QA_api):
 if __name__ == "__main__":
     Search = AI_Search()
     start = time.time()
-    print(Search.main('nineyi000360','500元以上的馬克杯'))
+    print(Search.main('nineyi000360', '最貴的馬克杯'))
     end = time.time()
     print(f'熱銷品執行時間{end-start}')
     #print(Search.main_sim('nineyi000360', '衛生紙'))
