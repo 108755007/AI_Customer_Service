@@ -239,7 +239,7 @@ class AiTraffic(Util):
         visited = []
         print(keyword_list)
         for key in keyword_list:
-            if key in set(df.keyword):
+            if len(df) and key in set(df.keyword):
                 curr_keyword_info = df[df.keyword == key]
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
                     if self.check_news(title):
