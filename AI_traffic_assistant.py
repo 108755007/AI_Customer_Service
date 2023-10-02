@@ -266,9 +266,11 @@ class AiTraffic(Util):
                 html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={search_key}'
                 r = requests.get(html)
                 if r.status_code != 200:
+                    keyword_info_dict[key] = ('_', '_', 'none', '_', '_')
                     continue
                 res = r.json().get('items')
                 if not res:
+                    keyword_info_dict[key] = ('_', '_', 'none', '_', '_')
                     continue
                 for data in res:
                     title = data.get('htmlTitle')
