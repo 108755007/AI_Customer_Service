@@ -21,9 +21,9 @@ import random
 class Util(QA_api):
     def __init__(self):
         super().__init__('line', logger())
-        self.base_web_id = 'kingstone'
+        self.base_web_id = 'nineyi000360'
         self.base_web_id_type = 1
-        self.web_id_dict = self.get_web_id()
+        self.get_web_id()
         self.dateint = self.get_data_intdate(7)
         self.azure_openai_setting()
         self.langchain_model_setting()
@@ -34,9 +34,11 @@ class Util(QA_api):
         return int(str(datetime.date.today()-datetime.timedelta(time_delay)).replace('-', ''))
 
     def get_web_id(self):
-        qurey = f"""SELECT web_id,web_id_type FROM missoner_web_id_table WHERE ai_article_enable = 1 """
+        qurey = f"""SELECT web_id,web_id_type,cx FROM missoner_web_id_table WHERE ai_article_enable = 1 """
         web_id_list = DBhelper('dione',is_ssh=True).ExecuteSelect(qurey)
-        return {i: v for i, v in web_id_list}
+        self.web_id_dict = {i: v for i, v, g in web_id_list}
+        self.web_id_cx = {i: g for i, v, g in web_id_list}
+        return
 
     def get_media_keyword_data(self):
         query = f"""
@@ -234,6 +236,8 @@ class AiTraffic(Util):
             print(f"""不包含{web_id}的關鍵字資訊,更改為base_web_id:{self.base_web_id}""")
             web_id = self.base_web_id
         keyword_list = keyword.split(',')
+        keyword_list = [i for i in keyword_list if i]
+        cx = self.web_id_cx[web_id]
         df = self.all_keyword_pd[web_id]
         keyword_info_dict = {}
         visited = []
@@ -244,12 +248,14 @@ class AiTraffic(Util):
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
                     if self.check_news(title):
                         keyword_info_dict[key] = (title,content, web_id, article_id, img)
+                        print(f'內站有關鍵字：{key}資訊')
                         break
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
                 for title, content, web_id_article,article_id , img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
                     if self.check_news(title):
                         keyword_info_dict[key] = (title,content, web_id_article, article_id, img)
+                        print(f'外站有關鍵字：{key}資訊')
                         break
             else:
                 if len(keyword_list) > 2:
@@ -259,26 +265,37 @@ class AiTraffic(Util):
                             continue
                         visited.append(set([key, r]))
                         search_key = f'{key}+{r}'
-                        print(f'google搜尋的關鍵字{search_key}')
+
                         break
                 else:
                     search_key = key
-                html = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={search_key}'
-                r = requests.get(html)
-                if r.status_code != 200:
-                    keyword_info_dict[key] = ('_', '_', 'none', '_', '_')
-                    continue
-                res = r.json().get('items')
-                if not res:
-                    keyword_info_dict[key] = ('_', '_', 'none', '_', '_')
-                    continue
-                for data in res:
-                    title = data.get('htmlTitle')
-                    sn = data.get('snippet')
-                    link = data.get('link')
-                    if self.check_news(title + sn):
-                        keyword_info_dict[key] = (title, sn, 'google', link, '_')
+
+                html1 = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={cx}&key={self.Search.GOOGLE_SEARCH_KEY}&q={key}'
+                html2 = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={search_key}'
+                for i, html in enumerate([html1, html2]):
+                    r = requests.get(html)
+                    if r.status_code != 200:
+                        continue
+                    res = r.json().get('items')
+                    if not res:
+                        continue
+                    for data in res:
+                        title = data.get('htmlTitle')
+                        sn = data.get('snippet')
+                        link = data.get('link')
+                        if self.check_news(title + sn):
+                            keyword_info_dict[key] = (title, sn, 'google', link, '_')
+                            break
+                    if key in keyword_info_dict:
+                        if i == 0:
+                            print(f'google搜尋主要關鍵字{key}')
+                        if i == 1:
+                            print(f'google搜尋主要關鍵字:{key},組合關鍵字:{search_key}')
                         break
+                if key not in keyword_info_dict:
+                    print(f'無關鍵字：{key}資訊')
+                    keyword_info_dict[key] = ('_', '_', 'none', '_', '_')
+
         print(f"""關鍵字資訊:{keyword_info_dict}""")
         return keyword_info_dict
 
@@ -295,8 +312,25 @@ class AiTraffic(Util):
             return False
         return True
 
-    def get_title(self,web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = None, types: int = 1):
+    def check_keyword(self, keywords, web_id):
+        print('檢查關鍵字是否包含')
+        if web_id not in self.web_id_dict:
+            web_id = self.base_web_id
+        df = self.all_keyword_pd[web_id]
+        keywords_set = set(df.keyword)
+        keyword_list = keywords.split(',')
+        for key in keyword_list:
+            if key in self.keyword_all_set or key in keywords_set:
+                print(f'關鍵字：{key}')
+                return True
+        return False
+
+
+    def get_title(self, web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = None, types: int = 1):
         print(f"""輸入web_id:{web_id}""")
+        check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
+        if not check_keyword:
+            pass
         keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(web_id, keywords)
         prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
         if types == 1:
