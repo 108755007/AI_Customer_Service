@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from AI_traffic_assistant import AiTraffic
 import pandas as pd
+from web_id_similarity import web_id_similarity
 from db import DBhelper
 description = """
 traffic_assistant
@@ -27,6 +28,10 @@ tags_metadata = [
     {
         "name": "check",
         "description": "confirm connection",
+    },
+    {
+        "name": "similarity",
+        "description": "web_id similarity",
     }
 ]
 
@@ -102,3 +107,9 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
 def checkdef(test: str = ''):
     if test:
         return True
+
+@app.get("/similarity", tags=["similarity"])
+def web_id_similarity(test: int = 1):
+    if test:
+        web_id_similarity()
+        return 'ok'
