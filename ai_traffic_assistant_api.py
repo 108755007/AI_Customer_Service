@@ -109,7 +109,7 @@ def checkdef(test: str = ''):
         return True
 
 @app.get("/similarity", tags=["similarity"])
-def web_id_similarity(test: int = 1):
+def web_id_similarity_func(test: int = 1):
     if test:
         web_id_similarity()
         return 'ok'
