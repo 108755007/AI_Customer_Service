@@ -21,11 +21,12 @@ class TSimilarity(ChatGPT_AVD):
         self.big_tag_emb = {}
         self.small_tag_emb = {}
         self.data = []
+        self.set_keyword = set()
+        self.set_big_tag = set()
+        self.set_small_tag = set()
         self.data_tensor = torch.tensor
         self.get_tag_embedding()
-        self.set_keyword = set(self.keyword_emb.keys())
-        self.set_big_tag = set(self.big_tag_emb.keys())
-        self.set_small_tag = set(self.small_tag_emb.keys())
+
     def get_tag_embedding(self):
         q = f"""SELECT tag_name,tag_type,tag_embeddings FROM web_push.tag_embeddings x"""
         print('讀取embedding資料中.....')
@@ -41,6 +42,9 @@ class TSimilarity(ChatGPT_AVD):
         print('讀取tag資料中.....')
         data = DBhelper('rhea1-db0').ExecuteSelect(q)
         self.data = data
+        self.set_keyword = set(self.keyword_emb.keys())
+        self.set_big_tag = set(self.big_tag_emb.keys())
+        self.set_small_tag = set(self.small_tag_emb.keys())
         all_emb = []
         for key, b, s in data:
             self.check_emb_data(key, b, s, True)
