@@ -23,7 +23,9 @@ class TSimilarity(ChatGPT_AVD):
         self.data = []
         self.data_tensor = torch.tensor
         self.get_tag_embedding()
-
+        self.set_keyword = set(self.keyword_emb.keys())
+        self.set_big_tag = set(self.big_tag_emb.keys())
+        self.set_small_tag = set(self.small_tag_emb.keys())
     def get_tag_embedding(self):
         q = f"""SELECT tag_name,tag_type,tag_embeddings FROM web_push.tag_embeddings x"""
         print('讀取embedding資料中.....')
@@ -54,18 +56,21 @@ class TSimilarity(ChatGPT_AVD):
         return emb
 
     def check_emb_data(self, key, b, s, save):
-        if key not in set(self.keyword_emb.keys()):
+        if key not in self.set_keyword:
             print(f'關鍵字"{key}"沒在資料庫')
             key_emb = self.get_emb(key, 0, save)
             self.keyword_emb[key] = key_emb
-        if b not in set(self.big_tag_emb.keys()):
+            self.set_keyword.add(key)
+        if b not in self.set_big_tag:
             print(f'大標題"{b}"沒在資料庫')
             big_emb = self.get_emb(b, 1, save)
             self.big_tag_emb[b] = big_emb
-        if s not in set(self.small_tag_emb.keys()):
+            self.set_big_tag.add(b)
+        if s not in self.set_small_tag:
             print(f'小標題"{s}"沒在資料庫')
             sml_emb = self.get_emb(s, 2, save)
             self.small_tag_emb[s] = sml_emb
+            self.set_small_tag.add(s)
 
     def similarity(self, keyword, big_tag, small_tag, key_wt=1.0, bt_wt=1.0, st_wt=1.0, top_k=10, save=False):
         keyword_list = []
