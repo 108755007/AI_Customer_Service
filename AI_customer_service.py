@@ -31,6 +31,8 @@ class ChatGPT_AVD:
                 model_name = "chat-cs-jp-35-16k"
             elif model == "gpt-4-32k":
                 model_name = "chat-cs-jp-4-32k"
+            elif model == 'gpt-text':
+                model_name = "chat-cs-jp-text"
             else:
                 model_name = "chat-cs-jp-35"
             # get token_id
@@ -62,6 +64,9 @@ class ChatGPT_AVD:
         openai.api_type = config.get('api_type')
         openai.api_base = config.get('api_base')
         openai.api_version = config.get('api_version')
+        if model == "chat-cs-jp-text":
+            response = openai.Embedding.create(input=message, engine=model)
+            return response['data'][0]['embedding']
         kwargs = {'engine': model}
         kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
         completion = openai.ChatCompletion.create(**kwargs)
@@ -632,6 +637,7 @@ class QA_api:
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
         # Step 4: update database
+        update_time=time.time()
         self.update_history_df(web_id, info, history_df, message, answer, keyword, keyword_list, time.time()-start_time, gpt_query, continuity)
         self.update_recommend_status(web_id, user_id, 1, recommend_ans)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
