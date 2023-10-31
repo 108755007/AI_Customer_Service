@@ -29,6 +29,7 @@ class Util(QA_api):
         self.langchain_model_setting()
         self.chat_check_model = AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0)
         self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35')
+        self.article_model_16k = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35-16k')
         self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-4')
     def get_data_intdate(self, time_delay):
         return int(str(datetime.date.today()-datetime.timedelta(time_delay)).replace('-', ''))
@@ -170,7 +171,7 @@ class Util(QA_api):
             gpt_res = output_parser.parse(output.content)
         except:
             print('產生失敗！！,重新產生')
-            retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model)
+            retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model_16k)
             gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         if not sub_list:
             res = [gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace('文章內容:', '')]
@@ -248,14 +249,14 @@ class AiTraffic(Util):
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
                     if self.check_news(title):
                         keyword_info_dict[key] = (title,content, web_id, article_id, img)
-                        print(f'內站有關鍵字：{key}資訊')
+                        print(f'內站有關鍵字：{key}')
                         break
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
                 for title, content, web_id_article,article_id , img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
                     if self.check_news(title):
                         keyword_info_dict[key] = (title,content, web_id_article, article_id, img)
-                        print(f'外站有關鍵字：{key}資訊')
+                        print(f'外站有關鍵字：{key}')
                         break
             else:
                 if len(keyword_list) > 2:
