@@ -329,9 +329,9 @@ class AiTraffic(Util):
 
     def get_title(self, web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = None, types: int = 1):
         print(f"""輸入web_id:{web_id}""")
-        check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
-        if not check_keyword:
-            pass
+        # check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
+        # if not check_keyword:
+        #     pass
         keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(web_id, keywords)
         prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
         if types == 1:
