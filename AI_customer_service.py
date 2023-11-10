@@ -518,6 +518,7 @@ class QA_api:
         return '客服忙碌中，請稍後再試。'
 
     def QA(self, web_id: str, message: str, info: str | list):
+        time_list=[]
         start_time = time.time()
         user_id = info[self.user_id_index]
         hash_ = str(abs(hash(str(user_id)+message)))[:6]
@@ -552,7 +553,11 @@ class QA_api:
         continuity = False
         history = json.loads(history_df['q_a_history'].iloc[0]) if (len(history_df) > 0 and continuity) else []
         self.logger.print('QA歷史紀錄:\n', history, hash=hash_)
+        judge_time_start = time.time()
+        time_list.append(judge_time_start-start_time)
         flags, f = self.judge_question_type(message)
+        time_list.append(time.time()-judge_time_start)
+
         self.logger.print(f'客戶意圖:\t{flags}\n{f}', hash=hash_)
         # if types == 1:
         #     gpt_query = self.ChatGPT.get_gpt_order_query(orders,message)
@@ -584,7 +589,9 @@ class QA_api:
                 self.logger.print('關鍵字:\t', keyword_list, hash=hash_)
                 #keyword_list,org_keyword_list = self.check_keyword(keyword_list, self.ban_keyword.get(web_id))
             else:
+                keyword_time_start = time.time()
                 keyword_list = self.get_question_keyword(message, web_id)
+                time_list.append(time.time()-keyword_time_start)
                 if keyword_list == 'timeout':
                     return self.error('keyword_timeout', hash=hash_)
                 elif keyword_list == 'no message':
@@ -593,6 +600,7 @@ class QA_api:
                 #keyword_list,org_keyword_list = self.check_keyword(keyword_list,self.ban_keyword.get(web_id))
 
             # Step 2: get gpt_query with search results from google search engine and likr recommend engine
+            likr_time_start = time.time()
             try:
                 if gps_location and flags.get('store_address'):
                     result = recommend_result = store_result + self.Recommend.likr_recommend([], '', flags, self.CONFIG[web_id])[:3]
@@ -612,7 +620,7 @@ class QA_api:
             except Exception as e:
                 self.logger.print(f'{traceback.format_tb(e.__traceback__)[-1]}\n ERROR: {e}', level='ERROR', hash=hash_)
                 return self.error('search_or_recommend_error', hash=hash_)
-
+            time_list.append(likr_time_start-time.time())
             if len(result) == 0 and self.CONFIG[web_id]['mode'] == 2:
                 gpt_query = [{'role': 'user', 'content': message}]
                 gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
@@ -621,11 +629,13 @@ class QA_api:
                 gpt_query, links = self.ChatGPT.get_gpt_query(recommend_result, message, history, self.CONFIG[web_id], continuity)
                 self.logger.print('輸入連結:\n', '\n'.join(' '.join(i[1:]) for i in links), hash=hash_)
                 self.logger.print('ChatGPT輸入:\t', gpt_query, hash=hash_)
-
-                gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, timeout=60)).replace('，\n', '，')
+                gpt_time_start = time.time()
+                gpt_answer = translation_stw(self.ChatGPT.ask_gpt(gpt_query, model='gpt-3.5-turbo-16k', timeout=60)).replace('，\n', '，')
+                time_list.append(time.time()-gpt_time_start)
                 if gpt_answer == 'timeout':
                     return self.error('gpt3_answer_timeout', hash=hash_)
                 self.logger.print('ChatGPT輸出:\t', gpt_answer, hash=hash_)
+                sub_time = time.time()
                 answer = self.adjust_ans_format(gpt_answer)
                 answer, unused_links = self.adjust_ans_url_format(answer, links, self.CONFIG[web_id])
                 if web_id in {'AviviD', 'avividai'} and len(history_df) == 0:
@@ -636,11 +646,14 @@ class QA_api:
                     answer,recommend_ans = self.answer_append(answer, flags, unused_links,self.CONFIG[web_id])
                 self.logger.print('回答:\t', answer, hash=hash_)
                 gpt_answer = re.sub(f'\[#?\d\]', '', gpt_answer)
+                time_list.append(time.time() - sub_time)
         # Step 4: update database
         update_time=time.time()
         self.update_history_df(web_id, info, history_df, message, answer, keyword, keyword_list, time.time()-start_time, gpt_query, continuity)
         self.update_recommend_status(web_id, user_id, 1, recommend_ans)
         self.logger.print('本次問答回應時間:\t', time.time()-start_time, hash=hash_)
+        time_list.append(time.time()-update_time)
+        print(time_list)
         return answer.replace('"',"'")
 
 
