@@ -614,7 +614,7 @@ class QA_api:
                     if web_id in {'AviviD', 'avividai'}:
                         recommend_result = result[:3]
                     else:
-                        recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:3]
+                        recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:1]
                     self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}', hash=hash_)
                     recommend_result = (n_product_result[:2] if flags.get('QA') else [], recommend_result)
             except Exception as e:

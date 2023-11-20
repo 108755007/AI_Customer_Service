@@ -2,7 +2,10 @@ import time
 
 from langchain.schema import OutputParserException
 import os
+import jieba
+import re
 from db import DBhelper
+from func_timeout import func_timeout
 from AI_customer_service import ChatGPT_AVD
 from likr_Search_engine import Search_engine
 from likr_Recommend_engine import Recommend_engine
@@ -58,10 +61,10 @@ class LangchainQA:
         try:
             out = self.judge_output.parse(output.content)
         except OutputParserException:
-            print('重新判斷語意')
-            retry_parser = RetryWithErrorOutputParser.from_llm(parser=self.judge_output, llm=self.chat_model_4)
-            out = retry_parser.parse_with_prompt(output.content, _input)
-        print(time.time()-start)
+            out = {'Inquiry about product information': 'False', 'Requesting returns or exchanges': 'False',
+                   'Complaints or issue feedback': 'False', 'General inquiries': 'False',
+                   'Simple Greeting or Introduction': 'False', 'Simple expression of gratitude': 'False',
+                   'Unable to determine intent or other': 'True'}
         return out
 
     def judge_setting(self):
@@ -69,14 +72,14 @@ class LangchainQA:
                                            description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
                             ResponseSchema(name="Requesting returns or exchanges",
                                            description="If Customers may need to return or exchange products they have purchased and want to understand the return and exchange policies and procedures.return 'True' else 'False'"),
-                            ResponseSchema(name="Complaints or issue feedback",
-                                           description="If Customers may encounter product quality issues, delivery delays, or dissatisfaction with services and want to file complaints or provide feedback.return 'True' else 'False'"),
                             ResponseSchema(name="General inquiries",
                                            description="If Customers may have general questions about the company, services, policies, or other related topics return 'True' else 'False'"),
                             ResponseSchema(name="Simple Greeting or Introduction",
                                            description="If customers initiate a simple greeting or introduction, return 'True' else 'False'"),
                             ResponseSchema(name="Simple expression of gratitude",
-                                           description="If customers express simple gratitude for help, return 'True' else 'False'")]
+                                           description="If customers express simple gratitude for help, return 'True' else 'False'"),
+                            ResponseSchema(name="Unable to determine intent or other",
+                                           description="If unable to determine user intent or other situations, return 'True', else 'False'")]
         self.judge_output = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = self.judge_output.get_format_instructions()
         self.judge_prompt = PromptTemplate(
@@ -89,11 +92,11 @@ class LangchainQA:
 class AICustomerAPI(ChatGPT_AVD, LangchainQA):
 
     def __init__(self):
-        print(555)
         ChatGPT_AVD.__init__(self)
         self.azure_openai_setting()
         LangchainQA.__init__(self)
         self.CONFIG = {}
+        self.get_config()
         self.Search = Search_engine()
         self.Recommend = Recommend_engine()
         self.auth = eval(os.getenv('SHORT_URL_TOKEN'))[0]
@@ -105,9 +108,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainQA):
         self.chat_model = AzureChatOpenAI
 
     def azure_openai_setting(self):
-        print('666')
         os.environ['OPENAI_API_KEY'] = self.AZURE_OPENAI_CONFIG.get('api_key')
-        print('777')
         os.environ['OPENAI_API_TYPE'] = self.AZURE_OPENAI_CONFIG.get('api_type')
         os.environ['OPENAI_API_BASE'] = self.AZURE_OPENAI_CONFIG.get('api_base')
         os.environ['OPENAI_API_VERSION'] = self.AZURE_OPENAI_CONFIG.get('api_version')
@@ -125,17 +126,48 @@ class AICustomerAPI(ChatGPT_AVD, LangchainQA):
                 self.CONFIG[conf[1]][k] = v
         return
 
-    def qa(self, web_id: str, message: str, user_id: str):
-        # hash_ = str(abs(hash(str(user_id) + message)))[:6]
+    def get_keyword(self, message: str, web_id: str) -> list:
+        forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$',
+                           '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
+                           '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦'}
+        # remove web_id from message
+        message = translation_stw(message).lower()
+        for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
+            message = re.sub(i, '', message)
+            for j in list(jieba.cut(i)):
+                message = re.sub(j, '', message)
+        if message.strip() == '':
+            return 'no message'
+        # segmentation
+        #print(message)
+        reply = self.ask_gpt([{'role': 'system', 'content': """I want you to act as a content analyzer for Chinese speaking users. You will segment the user's content into individual words, then assign a point value based on the importance of each word. If product names appear within the content, their scores should be doubled. Your responses should strictly follow this format: {"Word": Score}, and there should be no explanations within the responses"""},
+                                      {'role': 'user', 'content': f'{message}'}],
+                                     model='gpt-4')
+        if reply == 'timeout':
+            return ''
+        ####TODO(yu):perhaps have problem
+        keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if k in message and not any(re.search(w, k) for w in forbidden_words)]
+
+        return keyword_list
+
+    def qa(self, web_id: str, message: str, user_id: str, find_dpa=True):
+        hash_ = str(abs(hash(str(user_id) + message)))[:6]
         #
-        # #update_recommend_status(web_id, user_id, 0)
-        #
+        #update_recommend_status(web_id, user_id, 0)
+
+        keyword_list = self.get_keyword(message, web_id)
+        if keyword_list == 'timeout':
+            return self.error('keyword_timeout', hash=hash_)
+
+        result, keyword = func_timeout(10, self.Search.likr_search, (keyword_list, self.CONFIG[web_id], 3, False))
+        print(result, keyword)
+        return result, keyword
+
         # # history/continue
         # # to be add......
         # #
-        # q = self.get_judge(message)
+
         # return q
-        pass
 
 
 

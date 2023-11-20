@@ -38,17 +38,18 @@ class Search_engine():
 
     def get_search_url_list(self, web_id_conf: dict):
         url_list = []
-        for cx in (web_id_conf['domain_cx'], web_id_conf['sub_domain_cx']):
-            if cx != '_':
-                url_list.append((f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={cx}&key={self.GOOGLE_SEARCH_KEY}&q=", 3))
-                url_list.append((f"https://www.googleapis.com/customsearch/v1?cx={cx}&key={self.GOOGLE_SEARCH_KEY}&q=", 1))
+        if web_id_conf['domain_cx'] != '_':
+            url_list.append((f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={web_id_conf['domain_cx']}&key={self.GOOGLE_SEARCH_KEY}&q=", 1))
+        if web_id_conf['sub_domain_cx'] != '_':
+            url_list.append((f"https://www.googleapis.com/customsearch/v1/siterestrict?cx={web_id_conf['sub_domain_cx']}&key={self.GOOGLE_SEARCH_KEY}&q=", 2))
         return url_list
 
     def get_search_keyword_combination(self, keyword_list, max_length: int = 3):
         keyword_combination = []
         for i in range(min(len(keyword_list[:max_length]), 2), 0, -1):
             for j in itertools.combinations(keyword_list[:max_length], i):
-                keyword_combination.append(j)
+                if j not in keyword_combination:
+                    keyword_combination.append(j)
         return keyword_combination
 
     def likr_search(self, keyword_list: list, web_id_conf: dict, max_length: int = 3):
