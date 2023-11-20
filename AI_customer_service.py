@@ -614,7 +614,7 @@ class QA_api:
                     if web_id in {'AviviD', 'avividai'}:
                         recommend_result = result[:3]
                     else:
-                        recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:1]
+                        recommend_result = self.Recommend.likr_recommend(product_result, keyword_list, flags, self.CONFIG[web_id])[:2]
                     self.logger.print(f'Recommend_result:\t {[i.get("link") for i in recommend_result if i.get("link")], keyword}', hash=hash_)
                     recommend_result = (n_product_result[:2] if flags.get('QA') else [], recommend_result)
             except Exception as e:
@@ -663,4 +663,5 @@ if __name__ == "__main__":
     #print(AI_customer_service.QA('pure17', '有沒有健步機', ['U03PN370PRU', '1679046590.110499']))
     # line
     AI_customer_service = QA_api('line', logger())
-    print(AI_customer_service.QA('magiplanet', '如何退貨', ['123456aa4422']))
+    #print(AI_customer_service.test(message='可以退貨嘛'))
+    print(AI_customer_service.QA('avividai', '請問公司地點', ['123ssaa42']))
