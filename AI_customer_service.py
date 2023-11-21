@@ -225,7 +225,7 @@ class QA_api:
     ## Search and Recommend
     def get_question_keyword(self, message: str, web_id: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$', '^做$',
-                           '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
+                           '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$', '吃',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦'}
         # remove web_id from message
         message = translation_stw(message).lower()
