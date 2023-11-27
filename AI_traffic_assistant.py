@@ -337,7 +337,7 @@ class AiTraffic(Util):
         if types == 1:
             result = self.title_chain_1.run({'keyword_info': prompt})
             title = self.translation_stw(result.title)
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps([{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for keyword, data in keyword_info_dict.items()])]],columns=['user_id', 'web_id', 'type', 'inputs', 'title', 'keyword_dict']), db='sunscribe',table='ai_article', chunk_size=100000, is_ssh=False)
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps([{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for keyword, data in keyword_info_dict.items()]), datetime.datetime.now()]],columns=['user_id', 'web_id', 'type', 'inputs', 'title', 'keyword_dict', 'add_time']), db='sunscribe',table='ai_article', chunk_size=100000, is_ssh=False)
             return [title]
         else:
             if not article:
