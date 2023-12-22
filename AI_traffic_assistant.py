@@ -31,12 +31,13 @@ class Util(QA_api):
         self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35')
         self.article_model_16k = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35-16k')
         self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-4')
+
     def get_data_intdate(self, time_delay):
-        return int(str(datetime.date.today()-datetime.timedelta(time_delay)).replace('-', ''))
+        return int(str(datetime.date.today() - datetime.timedelta(time_delay)).replace('-', ''))
 
     def get_web_id(self):
         qurey = f"""SELECT web_id,web_id_type,cx FROM missoner_web_id_table WHERE ai_article_enable = 1 """
-        web_id_list = DBhelper('dione',is_ssh=True).ExecuteSelect(qurey)
+        web_id_list = DBhelper('dione', is_ssh=True).ExecuteSelect(qurey)
         self.web_id_dict = {i: v for i, v, g in web_id_list}
         self.web_id_cx = {i: g for i, v, g in web_id_list}
         return
@@ -52,7 +53,7 @@ class Util(QA_api):
                 WHERE `date` > {self.dateint} ) t 
         ON k.article_id = t.article_id ORDER BY t.pageviews desc;
         """
-        data = DBhelper('dione',is_ssh=True).ExecuteSelect(query)
+        data = DBhelper('dione', is_ssh=True).ExecuteSelect(query)
         return pd.DataFrame(data).drop_duplicates(['keyword', 'title'])
 
     def get_keyword_data(self, web_id):
@@ -69,7 +70,7 @@ class Util(QA_api):
             query += f""" `date` > {self.dateint} and"""
         query += f""" web_id = '{web_id}') t 
                     ON k.article_id = t.article_id ORDER BY t.pageviews desc;"""
-        data = DBhelper('dione',is_ssh=True).ExecuteSelect(query)
+        data = DBhelper('dione', is_ssh=True).ExecuteSelect(query)
         return pd.DataFrame(data).drop_duplicates(['keyword', 'title'])
 
     def langchain_model_setting(self):
@@ -150,7 +151,7 @@ class Util(QA_api):
         os.environ['OPENAI_API_BASE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_base')
         os.environ['OPENAI_API_VERSION'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_version')
 
-    def translation_stw(self,text):
+    def translation_stw(self, text):
         cc = OpenCC('likr-s2twp')
         return cc.convert(text)
 
@@ -248,25 +249,29 @@ class AiTraffic(Util):
                 curr_keyword_info = df[df.keyword == key]
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
                     if self.check_news(title):
-                        keyword_info_dict[key] = (title,content, web_id, article_id, img)
+                        keyword_info_dict[key] = (title, content, web_id, article_id, img)
                         print(f'內站有關鍵字：{key}')
                         break
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
                 for title, content, web_id_article,article_id , img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
                     if self.check_news(title):
-                        keyword_info_dict[key] = (title,content, web_id_article, article_id, img)
+                        keyword_info_dict[key] = (title, content, web_id_article, article_id, img)
                         print(f'外站有關鍵字：{key}')
                         break
             else:
                 if len(keyword_list) > 2:
+                    t = 0
                     while True:
+                        if t == 10:
+                            search_key = key
+                            break
                         r = random.choice(keyword_list)
                         if set([key, r]) in visited or r == key:
+                            t += 1
                             continue
                         visited.append(set([key, r]))
                         search_key = f'{key}+{r}'
-
                         break
                 else:
                     search_key = key
@@ -274,7 +279,7 @@ class AiTraffic(Util):
                 html1 = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx={cx}&key={self.Search.GOOGLE_SEARCH_KEY}&q={key}'
                 html2 = f'https://www.googleapis.com/customsearch/v1/siterestrict?cx=41d4033f0c2f04bb8&key={self.Search.GOOGLE_SEARCH_KEY}&q={search_key}'
                 for i, html in enumerate([html1, html2]):
-                    r = requests.get(html)
+                    r = requests.get(html, timeout=5)
                     if r.status_code != 200:
                         continue
                     res = r.json().get('items')
