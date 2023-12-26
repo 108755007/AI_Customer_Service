@@ -27,10 +27,10 @@ class Util(QA_api):
         self.dateint = self.get_data_intdate(7)
         self.azure_openai_setting()
         self.langchain_model_setting()
-        self.chat_check_model = AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0)
-        self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35')
-        self.article_model_16k = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-35-16k')
-        self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-jp-4')
+        self.chat_check_model = AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0)
+        self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-35')
+        self.article_model_16k = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-35-16k')
+        self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-4')
 
     def get_data_intdate(self, time_delay):
         return int(str(datetime.date.today() - datetime.timedelta(time_delay)).replace('-', ''))
@@ -160,12 +160,15 @@ class Util(QA_api):
             response_schemas = [ResponseSchema(name=f"Articles", description=f"Articles")]
             model = self.article_4_model
         else:
-            response_schemas = [ResponseSchema(name=f"paragraph_{i+1}", description=f"Articles with subtitle '{v}'") for i, v in enumerate(sub_list)]
+            response_schemas = [ResponseSchema(name=f"paragraph_{i + 1}", description=f"Articles with subtitle '{v}'")
+                                for i, v in enumerate(sub_list)]
             model = self.article_model
         output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = output_parser.get_format_instructions()
-        _input = ChatPromptTemplate(messages=[HumanMessagePromptTemplate.from_template("{question}\n{format_instructions}\n")],
-                                    input_variables=["question"], partial_variables={"format_instructions": format_instructions}).format_prompt(question=prompt)
+        _input = ChatPromptTemplate(
+            messages=[HumanMessagePromptTemplate.from_template("{question}\n{format_instructions}\n")],
+            input_variables=["question"], partial_variables={"format_instructions": format_instructions}).format_prompt(
+            question=prompt)
         output = model(_input.to_messages())
         # noinspection PyBroadException
         try:
@@ -175,7 +178,9 @@ class Util(QA_api):
             retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model_16k)
             gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         if not sub_list:
-            res = [gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace('文章內容:', '')]
+            res = [
+                gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace(
+                    '文章內容:', '')]
         else:
             res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
         return res
@@ -203,7 +208,8 @@ class Util(QA_api):
         prompt += """
         Keywords and Explanations:
         """
-        prompt += '     '.join([f"""{i + 1}."{data[0]}": "{data[1][0]}"\n""" for i, data in enumerate(keyword_info_dict.items())])
+        prompt += '     '.join(
+            [f"""{i + 1}."{data[0]}": "{data[1][0]}"\n""" for i, data in enumerate(keyword_info_dict.items())])
         if ta_setting:
             prompt += f"""
             Target Audience information and Interests:
@@ -217,7 +223,7 @@ class Util(QA_api):
             prompt = prompt.replace(",TargetAudience", '')
         prompt += "Please focus on incorporating each keyword in the article in a manner that reflects a clear understanding of its meaning while considering the target audience provided. Be creative, and ensure that each subtitle has its own section in the article.Please ensure that the subtitles are not altered in any way. "
         if not ta_setting:
-            prompt = prompt.replace(" while considering the target audience provided",'')
+            prompt = prompt.replace(" while considering the target audience provided", '')
         if not sub_list:
             prompt += "and there should be no explanations within the responses only response article.don't add any subtitles"
         print(f"""PROMPT:{prompt}""")
@@ -254,7 +260,8 @@ class AiTraffic(Util):
                         break
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
-                for title, content, web_id_article,article_id , img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
+                for title, content, web_id_article, article_id, img in curr_keyword_info[
+                    ['title', 'content', 'web_id', 'url', 'image']].values:
                     if self.check_news(title):
                         keyword_info_dict[key] = (title, content, web_id_article, article_id, img)
                         print(f'外站有關鍵字：{key}')
@@ -337,7 +344,8 @@ class AiTraffic(Util):
         # check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
         # if not check_keyword:
         #     pass
-        keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(web_id, keywords)
+        keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(
+            web_id, keywords)
         prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
         if types == 1:
             result = self.title_chain_1.run({'keyword_info': prompt})
@@ -356,8 +364,14 @@ class AiTraffic(Util):
         print(f"""獲取副標題,標題為:{title}""")
         result = self.title_chain_sub.run({'title': title})
         print(f"""副標題產生成功,副標題為:{result.sub_title}""")
-        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, title, result.sub_title[0], result.sub_title[1], result.sub_title[2], result.sub_title[3], result.sub_title[4]]],columns=['user_id', 'web_id', 'type', 'title', 'subheading_1', 'subheading_2', 'subheading_3','subheading_4', 'subheading_5']), db='sunscribe', table='ai_article', chunk_size=100000,is_ssh=False)
-        return {i+1: v for i, v in enumerate(result.sub_title)}
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, title, result.sub_title[0],
+                                                     result.sub_title[1], result.sub_title[2], result.sub_title[3],
+                                                     result.sub_title[4]]],
+                                                   columns=['user_id', 'web_id', 'type', 'title', 'subheading_1',
+                                                            'subheading_2', 'subheading_3', 'subheading_4',
+                                                            'subheading_5']), db='sunscribe', table='ai_article',
+                                      chunk_size=100000, is_ssh=False)
+        return {i + 1: v for i, v in enumerate(result.sub_title)}
 
     def generate_articles(self, title: str = '', subtitle_list: list = [], keywords: str = '', user_id: str = '',
                                  web_id: str = 'test', types: int = 1, ta: list = []):
@@ -366,7 +380,8 @@ class AiTraffic(Util):
         sub_list = [i for i in subtitle_list if i]
         if keyword_info_db:
             print('db有keyword_info')
-            keyword_info_dict = {i['keyword']: (i['title'], i['web_id'], i['url']) for i in json.loads(keyword_info_db[0][0])}
+            keyword_info_dict = {i['keyword']: (i['title'], i['web_id'], i['url']) for i in
+                                 json.loads(keyword_info_db[0][0])}
         else:
             print('db無keyword_info,可能有問題')
             keyword_info_dict = self.get_keyword_info(web_id, keywords)
@@ -378,4 +393,3 @@ class AiTraffic(Util):
 
 if __name__ == " __main__":
     AI_traffic = AiTraffic()
-

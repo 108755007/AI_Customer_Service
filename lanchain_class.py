@@ -10,3 +10,7 @@ class title_5(BaseModel):
 
 class sub_title(BaseModel):
     sub_title: list = Field(description="list of sub-title of data")
+
+
+class depiction(BaseModel):
+    title: str = Field(description="str of depiction of item")
