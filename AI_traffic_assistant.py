@@ -144,6 +144,15 @@ class Util(QA_api):
         self.title_chain_1 = LLMChain(prompt=prompt_1, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_1)
         self.title_chain_5 = LLMChain(prompt=prompt_5, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_5)
         self.title_chain_sub = LLMChain(prompt=prompt_sub, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_sub)
+        self.title_chain_1 = LLMChain(prompt=prompt_1,
+                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
+                                      output_parser=output_parser_1)
+        self.title_chain_5 = LLMChain(prompt=prompt_5,
+                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
+                                      output_parser=output_parser_5)
+        self.title_chain_sub = LLMChain(prompt=prompt_sub,
+                                        llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
+                                        output_parser=output_parser_sub)
 
     def azure_openai_setting(self):
         os.environ['OPENAI_API_KEY'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
