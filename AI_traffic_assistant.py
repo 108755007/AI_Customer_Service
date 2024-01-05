@@ -208,6 +208,7 @@ class Util(QA_api):
             """
         else:
             prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list))}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way.
+            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style """
 
             Title: "{title}"
 
