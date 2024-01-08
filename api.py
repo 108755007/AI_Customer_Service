@@ -1,3 +1,5 @@
+import time
+
 from fastapi import FastAPI
 import sys
 from utils.log import logger
@@ -78,15 +80,16 @@ a_dict, q_emb_tensor = get_tag_embedding()
 
 
 @app.get("/AI_service", tags=["AI_service"])
-def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文'):
+def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文', main_web_id: str = ''):
     if web_id == '' or message == '' or group_id == '':
         return {"message": "no sentence input or no web_id", "message": ""}
-    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang)
+    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id)
 
 
 @app.get("/update_product", tags=["get_product"])
-def ai_update_product(web_id: str = '', group_id: str = ''):
-    AI_judge.update_recommend_status(web_id, group_id, 1)
+def ai_update_product(web_id: str = '', group_id: str = '', main_web_id: str = ''):
+    main_web_id = web_id if main_web_id == '' else main_web_id
+    AI_judge.update_recommend_status(web_id, group_id, 1, main_web_id=main_web_id)
     return 'ok'
 
 
@@ -108,13 +111,15 @@ def ai_description(title: str = ''):
 
 
 @app.get("/judge", tags=["judge"])
-def ai_service_judge(web_id: str = '', group_id: str = '', message: str = ''):
+def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
+    start = time.time()
+    main_web_id = web_id if main_web_id == '' else main_web_id
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
     tr = False
     lang = '繁體中文'
     reply = "" if status else "您好，我是客服機器人小禾！"
-    if web_id == 'avividai':
+    if main_web_id == 'avividai':
         lang = AI_judge.check_lang(message)
         print(f'{group_id}:分析出的語言是：{lang}')
         if lang not in ['chinese', 'Chinese', '中文', '國語']:
@@ -159,6 +164,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = ''):
             reply = AI_judge.translate(lang, reply)
         types = 6
     print(f'回傳判斷：{types}')
+    print(f'judge判斷時間{time.time()-start}')
     return types, reply, lang
 
 # @app.get("/AI_Search", tags=["AI_Search"])

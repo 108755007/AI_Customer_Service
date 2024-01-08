@@ -126,6 +126,26 @@ class Util(QA_api):
         -----
         {format_instructions}
         """
+        template_1_eng = """
+        Generate 1 titles based on keywords and their sources.
+        
+        {keyword_info}
+        
+        The titles must include the keywords and should not contain any news websites.
+
+        -----
+        {format_instructions}
+        """
+        template_5_eng = """
+        Generate 5 titles based on keywords and their sources.
+        
+        {keyword_info}
+        
+        The titles must include the keywords and should not contain any news websites.
+
+        -----
+        {format_instructions}
+        """
         prompt_1 = PromptTemplate(  # 设置prompt模板，用于格式化输入
             template=template_1,
             input_variables=["keyword_info"],
@@ -136,18 +156,31 @@ class Util(QA_api):
             input_variables=["keyword_info"],
             partial_variables={"format_instructions": format_instructions_5}
         )
+        prompt_1_eng = PromptTemplate(  # 设置prompt模板，用于格式化输入
+            template=template_1_eng,
+            input_variables=["keyword_info"],
+            partial_variables={"format_instructions": format_instructions_1}
+        )
+        prompt_5_eng = PromptTemplate(  # 设置prompt模板，用于格式化输入
+            template=template_5_eng,
+            input_variables=["keyword_info"],
+            partial_variables={"format_instructions": format_instructions_5}
+        )
         prompt_sub = PromptTemplate(  # 设置prompt模板，用于格式化输入
             template=template_sub,
             input_variables=["title"],
             partial_variables={"format_instructions": format_instructions_sub}
         )
-        self.title_chain_1 = LLMChain(prompt=prompt_1, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_1)
-        self.title_chain_5 = LLMChain(prompt=prompt_5, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_5)
-        self.title_chain_sub = LLMChain(prompt=prompt_sub, llm=AzureChatOpenAI(deployment_name="chat-cs-jp-4", temperature=0), output_parser=output_parser_sub)
         self.title_chain_1 = LLMChain(prompt=prompt_1,
                                       llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
                                       output_parser=output_parser_1)
         self.title_chain_5 = LLMChain(prompt=prompt_5,
+                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
+                                      output_parser=output_parser_5)
+        self.title_chain_1_eng = LLMChain(prompt=prompt_1_eng,
+                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
+                                      output_parser=output_parser_1)
+        self.title_chain_5_eng = LLMChain(prompt=prompt_5_eng,
                                       llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
                                       output_parser=output_parser_5)
         self.title_chain_sub = LLMChain(prompt=prompt_sub,
@@ -194,7 +227,7 @@ class Util(QA_api):
             res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
         return res
 
-    def get_generate_articles_prompt(self, title, sub_list, keyword_info_dict, ta_setting):
+    def get_generate_articles_prompt(self, title, sub_list, keyword_info_dict, ta_setting, eng=False):
         if not ta_setting:
             print(f"產生無TA文章,段落：{len(sub_list)}")
             style = 'easy'
@@ -202,13 +235,19 @@ class Util(QA_api):
             print(f"產生有TA文章,段落：{len(sub_list)}")
             gender, age, income, interests, occupation, style = ta_setting
         if not sub_list:
-            prompt = f"""Please use the following provided information to craft the concise article of approximately 100 words,including the title, subtitles, keywords, keyword explanations,Target Audienceand,and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.
+            prompt = f"""Please use the following provided information to craft the concise article of approximately 100 words,including the title, subtitles, keywords, keyword explanations,Target Audienceand,and other relevant details. The article should be written in an {style} style """
+            if not eng:
+                prompt += "and in Taiwan Mandarin"
+            prompt += f""". Ensure that proper grammar and sentence structure are maintained throughout.
 
             Title: "{title}"
             """
         else:
-            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list))}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way.
-            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style """
+            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way."""
+            #prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style """
+            if not eng:
+                prompt += "and in Taiwan Mandarin"
+            prompt += f""". Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way.
 
             Title: "{title}"
 
@@ -348,8 +387,8 @@ class AiTraffic(Util):
                 return True
         return False
 
-
-    def get_title(self, web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = None, types: int = 1):
+    def get_title(self, web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '',
+                  article: str = None, types: int = 1, eng=False):
         print(f"""輸入web_id:{web_id}""")
         # check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
         # if not check_keyword:
@@ -358,16 +397,29 @@ class AiTraffic(Util):
             web_id, keywords)
         prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
         if types == 1:
-            result = self.title_chain_1.run({'keyword_info': prompt})
-            title = self.translation_stw(result.title)
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps([{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for keyword, data in keyword_info_dict.items()]), datetime.datetime.now()]],columns=['user_id', 'web_id', 'type', 'inputs', 'title', 'keyword_dict', 'add_time']), db='sunscribe',table='ai_article', chunk_size=100000, is_ssh=False)
+            result = self.title_chain_1.run({'keyword_info': prompt}) if not eng else self.title_chain_1_eng.run({'keyword_info': prompt})
+            title = self.translation_stw(result.title) if not eng else result.title
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps(
+                [{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for
+                 keyword, data in keyword_info_dict.items()]), datetime.datetime.now()]],
+                                                       columns=['user_id', 'web_id', 'type', 'inputs', 'title',
+                                                                'keyword_dict', 'add_time']), db='sunscribe',
+                                          table='ai_article', chunk_size=100000, is_ssh=False)
             return [title]
         else:
             if not article:
                 return {"message": "no article input"}
-            result = self.title_chain_5.run({'keyword_info': prompt})
-            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, self.translation_stw(result.title[0]),self.translation_stw(result.title[1]), self.translation_stw(result.title[2]), self.translation_stw(result.title[3]), self.translation_stw(result.title[4]),article, 2]],
-                                                       columns=['user_id', 'web_id', 'type', 'inputs', 'subheading_1','subheading_2', 'subheading_3', 'subheading_4', 'subheading_5', 'article_1', 'article_step']), db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
+            result = self.title_chain_5.run({'keyword_info': prompt}) if not eng else self.title_chain_5_eng.run({'keyword_info': prompt})
+            DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords,
+                                                         self.translation_stw(result.title[0]),
+                                                         self.translation_stw(result.title[1]),
+                                                         self.translation_stw(result.title[2]),
+                                                         self.translation_stw(result.title[3]),
+                                                         self.translation_stw(result.title[4]), article, 2]],
+                                                       columns=['user_id', 'web_id', 'type', 'inputs', 'subheading_1',
+                                                                'subheading_2', 'subheading_3', 'subheading_4',
+                                                                'subheading_5', 'article_1', 'article_step']),
+                                          db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
             return result.title
 
     def get_sub_title(self, title: str = '', user_id: str = '', web_id: str = 'test', types: int = 1):
@@ -384,7 +436,7 @@ class AiTraffic(Util):
         return {i + 1: v for i, v in enumerate(result.sub_title)}
 
     def generate_articles(self, title: str = '', subtitle_list: list = [], keywords: str = '', user_id: str = '',
-                                 web_id: str = 'test', types: int = 1, ta: list = []):
+                          web_id: str = 'test', types: int = 1, ta: list = [], eng=False):
         query = f"SELECT keyword_dict  FROM web_push.ai_article WHERE web_id = '{web_id}' and user_id  ='{user_id}'"
         keyword_info_db = DBhelper('sunscribe').ExecuteSelect(query)
         sub_list = [i for i in subtitle_list if i]
@@ -395,7 +447,7 @@ class AiTraffic(Util):
         else:
             print('db無keyword_info,可能有問題')
             keyword_info_dict = self.get_keyword_info(web_id, keywords)
-        prompt = self.get_generate_articles_prompt(title, sub_list, keyword_info_dict, ta)
+        prompt = self.get_generate_articles_prompt(title, sub_list, keyword_info_dict, ta, eng)
         res = self.get_article(prompt, title, sub_list)
         print(f"""產生的文章內容:\n{res}""")
         return res
