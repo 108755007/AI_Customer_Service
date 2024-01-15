@@ -77,49 +77,25 @@ class LangchainSetting:
         return out
 
     def judge_setting(self):
-        self.judge_prompt_text = """You are a GPT-4 powered assistant programmed to respond to customer intents with JSON-formatted outputs. Your job is to analyze a customer's message and determine its intent based on the following categories:
+        self.judge_prompt_text = """You are a sophisticated AI designed to output structured data in JSON format. Your task is to analyze customer inquiries submitted via text and determine the corresponding intent. Based on the intent, your output should provide a JSON object with a 'type' field indicating the category of the intent .The intent categories and the expected details for each are as follows:
 
-        1. Inquiry about product information
-        2. Requesting returns or exchanges
-        3. Inquiry about company information
-        4. Simple Greeting or Introduction
-        5. Simple expression of gratitude
-        6. Unable to determine intent or other
-
-        For each message, output a JSON object that includes a "category" field representing the intent and a "response" field with a value "TRUE" indicating that an intent has been recognized. If the intent is undetermined or not applicable, set "response" to "FALSE". Here are examples of JSON responses for each category:
-
-        {
-          "category": "Inquiry about product information",
-          "response": "TRUE"
-        }
-
-        {
-          "category": "Requesting returns or exchanges",
-          "response": "TRUE"
-        }
-
-        {
-          "category": "Inquiry about company information",
-          "response": "TRUE"
-        }
-
-        {
-          "category": "Simple Greeting or Introduction",
-          "response": "TRUE"
-        }
-
-        {
-          "category": "Simple expression of gratitude",
-          "response": "TRUE"
-        }
-
-        {
-          "category": "Unable to determine intent or other",
-          "response": "TRUE"
-        }
-
-        Upon receiving a customer's message, return the appropriate JSON response based on the detected intent.
-        """
+                                    1. 'product_inquiry': Customers may inquire about product features, specifications, prices, and availability. 
+                                    
+                                    2. 'return_or_exchange_request': Customers may seek assistance with returning or exchanging their purchased products, and they require information about return and exchange policies.
+                                    
+                                    3. 'general_inquiry': Customers may have general questions regarding the company’s services, purchasing methods, or other company policies. 
+                                    
+                                    4. 'greeting': Customers may initiate a conversation with a simple greeting or introduction. 
+                                    
+                                    5. 'expression_of_gratitude': Customers express gratitude for the assistance they have received. 
+                                    
+                                    6. 'unknown_intent': The customer's intent is unclear, or the scenario doesn't fit any of the categories above. 
+                                    
+                                    For each of these intents, provide a JSON object with 'type': Returns the most likely intent. Here is an example of how the JSON output should look:
+                                    {
+                                      'type': 'product_inquiry'
+                                    }
+                                    Please analyze the customer's text input and provide an appropriate JSON response."""
         response_schemas = [ResponseSchema(name="Inquiry about product information",
                                            description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
                             ResponseSchema(name="Requesting returns or exchanges",
@@ -207,13 +183,13 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
     def get_judge_test(self, message):
         messages = [
             {"role": "system", "content": self.judge_prompt_text},
-            {"role": "user", "content":message}
+            {"role": "user", "content": message}
         ]
         ans = self.ask_gpt(message=messages)
         try:
-            return eval(ans).get('category').lower()
+            return eval(ans).get('type').lower()
         except:
-            return 'unable to determine intent or other'
+            return 'unknown_intent'
 
     def get_config(self):
         """

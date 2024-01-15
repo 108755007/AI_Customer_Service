@@ -125,29 +125,29 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         if lang not in ['chinese', 'Chinese', '中文', '國語', '繁體中文']:
             tr = True
     custom_judge = AI_judge.get_judge_test(message)
-    if custom_judge == 'inquiry about product information':
+    if custom_judge == 'product_inquiry':
         reply += '正在為您查詢商品,稍等一下呦！'
         if tr:
             reply = AI_judge.translate(lang, reply).split("'translation':")[-1].replace('}', '')
         types = 1
-    elif custom_judge == 'requesting returns or exchanges':
+    elif custom_judge == 'return_or_exchange_request':
         reply += '將為您提供退換貨說明,請稍待～'
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 2
-    elif custom_judge == 'inquiry about company information':
+    elif custom_judge == 'general_inquiry':
         reply += '請稍等,將為您提供相關資訊！'
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 3
-    elif custom_judge == 'simple greeting or introduction':
+    elif custom_judge == 'greeting':
         if status:
             reply += '你好！'
         reply += '謝謝您對我們的關注,祝您愉快！'
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 4
-    elif custom_judge == 'simple expression of gratitude':
+    elif custom_judge == 'expression_of_gratitude':
         reply += '很高興能解決您的問題,祝您愉快！'
         if tr:
             reply = AI_judge.translate(lang, reply)
