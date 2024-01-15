@@ -77,6 +77,49 @@ class LangchainSetting:
         return out
 
     def judge_setting(self):
+        self.judge_prompt_text = """You are a GPT-4 powered assistant programmed to respond to customer intents with JSON-formatted outputs. Your job is to analyze a customer's message and determine its intent based on the following categories:
+
+        1. Inquiry about product information
+        2. Requesting returns or exchanges
+        3. Inquiry about company information
+        4. Simple Greeting or Introduction
+        5. Simple expression of gratitude
+        6. Unable to determine intent or other
+
+        For each message, output a JSON object that includes a "category" field representing the intent and a "response" field with a value "TRUE" indicating that an intent has been recognized. If the intent is undetermined or not applicable, set "response" to "FALSE". Here are examples of JSON responses for each category:
+
+        {
+          "category": "Inquiry about product information",
+          "response": "TRUE"
+        }
+
+        {
+          "category": "Requesting returns or exchanges",
+          "response": "TRUE"
+        }
+
+        {
+          "category": "Inquiry about company information",
+          "response": "TRUE"
+        }
+
+        {
+          "category": "Simple Greeting or Introduction",
+          "response": "TRUE"
+        }
+
+        {
+          "category": "Simple expression of gratitude",
+          "response": "TRUE"
+        }
+
+        {
+          "category": "Unable to determine intent or other",
+          "response": "TRUE"
+        }
+
+        Upon receiving a customer's message, return the appropriate JSON response based on the detected intent.
+        """
         response_schemas = [ResponseSchema(name="Inquiry about product information",
                                            description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
                             ResponseSchema(name="Requesting returns or exchanges",
@@ -160,6 +203,17 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         os.environ['OPENAI_API_TYPE'] = self.AZURE_OPENAI_CONFIG.get('api_type')
         os.environ['OPENAI_API_BASE'] = self.AZURE_OPENAI_CONFIG.get('api_base')
         os.environ['OPENAI_API_VERSION'] = self.AZURE_OPENAI_CONFIG.get('api_version')
+
+    def get_judge_test(self, message):
+        messages = [
+            {"role": "system", "content": self.judge_prompt_text},
+            {"role": "user", "content":message}
+        ]
+        ans = self.ask_gpt(message=messages)
+        try:
+            return eval(ans).get('category').lower()
+        except:
+            return 'unable to determine intent or other'
 
     def get_config(self):
         """
@@ -292,7 +346,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         return lang.split(':')[-1]
 
     def translate(self, lang, out):
-        if lang not in ['Chinese', '中文', '繁體中文', 'chinese']:
+        if lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語']:
             out = self.ask_gpt([{'role': 'system',
                                  'content': f"""Please translate this given input into {lang}. All I need returned is the translated text,Answer format <\'output\':translated text """},
                                 {'role': 'user', 'content': f"<\'input\':'{out}'>"}], model='gpt-3.5-turbo-16k"', timeout=120)

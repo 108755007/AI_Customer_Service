@@ -1,5 +1,6 @@
 import collections
 import random
+from openai import AzureOpenAI
 from dotenv import load_dotenv
 load_dotenv()
 import os, traceback, re, json, time
@@ -22,10 +23,10 @@ class ChatGPT_AVD:
     def __init__(self):
         self.OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
         self.AZURE_OPENAI_CONFIG = eval(os.getenv('AZURE_OPENAI_CONFIG'))
+        self.AZURE_client = self.set_azure_client()
 
     def get_keys(func):
-        def inner(self, message, model="gpt-3.5-turbo", timeout=60, azure=True, debug=False):
-            config = self.AZURE_OPENAI_CONFIG
+        def inner(self, message, model="gpt-3.5-turbo", timeout=60, debug=False, json_format=False):
             if model == "gpt-4":
                 model_name = 'chat-cs-canada-4'
             elif model == "gpt-3.5-turbo-16k":
@@ -34,47 +35,40 @@ class ChatGPT_AVD:
                 model_name = "chat-cs-canada-4-32"
             elif model == 'gpt-text':
                 model_name = "chat-cs-canada-text"
+            elif model == 'gpt-4-pre':
+                model_name = "chat-cs-canada-4-Preview"
             else:
                 model_name = "chat-cs-canada-35"
-            # get token_id
-            if not azure:
-                query = 'SELECT id, counts FROM web_push.AI_service_token_counter x ORDER BY counts limit 1;'
-                # query = 'x WHERE id > 6'.join(query.split('x'))
-                token_id = DBhelper('jupiter_new').ExecuteSelect(query)[0][0]
-                config = {'api_key': self.OPEN_AI_KEY_DICT[token_id],
-                          'api_type': 'open_ai',
-                          'api_base': 'https://api.openai.com/v1',
-                          'api_version': None,
-                          'kwargs': {'model': model}}
-                # update token counter
-                DBhelper('jupiter_new').ExecuteDelete(
-                    f'UPDATE web_push.AI_service_token_counter SET counts = counts + 1 WHERE id = {token_id}')
             if debug:
-                res = func_timeout(timeout, func, (self, message, config, model_name))
+                res = func_timeout(timeout, func, (self, message, model_name, json_format))
             else:
                 try:
-                    res = func_timeout(timeout, func, (self, message, config, model_name))
+                    res = func_timeout(timeout, func, (self, message, model_name, json_format))
                 except:
                     res = 'timeout'
-            if not azure:
-                DBhelper('jupiter_new').ExecuteDelete(
-                    f'UPDATE web_push.AI_service_token_counter SET counts = counts - 1 WHERE id = {token_id}')
             return res
         return inner
 
+    def set_azure_client(self):
+        client = AzureOpenAI(
+            azure_endpoint=self.AZURE_OPENAI_CONFIG.get("api_base"),
+            api_key=self.AZURE_OPENAI_CONFIG.get("api_key"),
+            api_version=self.AZURE_OPENAI_CONFIG.get("api_version")
+        )
+        return client
+
+
     @get_keys
-    def ask_gpt(self, message: str, config: dict, model: str) -> str:
-        openai.api_key = config.get('api_key')
-        openai.api_type = config.get('api_type')
-        openai.api_base = config.get('api_base')
-        openai.api_version = config.get('api_version')
+    def ask_gpt(self, message: str, model: str, json_format: bool = False) -> str:
         if model == "chat-cs-canada-text":
-            response = openai.Embedding.create(input=message, engine=model)
-            return response['data'][0]['embedding']
-        kwargs = {'engine': model}
+            response = self.AZURE_client.embeddings.create(input=message, model=model)
+            return response.data[0].embedding
+        kwargs = {'model': model}
+        if json_format:
+            kwargs['response_format'] = {"type": "json_object"}
         kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
-        completion = openai.ChatCompletion.create(**kwargs)
-        return completion['choices'][0]['message']['content']
+        response = self.AZURE_client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content
 
     def num_tokens_from_messages(self, messages: list[dict], model: str = "gpt-3.5-turbo") -> int:
         """Returns the number of tokens used by a list of messages."""
