@@ -83,7 +83,7 @@ class LangchainSetting:
                                     
                                     2. 'return_or_exchange_request': Customers may seek assistance with returning or exchanging their purchased products, and they require information about return and exchange policies.
                                     
-                                    3. 'general_inquiry': Customers may have general questions regarding the company’s services, purchasing methods, or other company policies. 
+                                    3. 'general_inquiry': Customers may have general questions regarding the company’s services, purchasing methods,check delivery time ,or other company policies. 
                                     
                                     4. 'greeting': Customers may initiate a conversation with a simple greeting or introduction. 
                                     
@@ -406,7 +406,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 else:
                     if search_result:
                         if common:
-                            gpt_query, links = self.get_gpt_query([common[:1], []], message, [], self.CONFIG[main_web_id],
+                            gpt_query, links = self.get_gpt_query([common[:2], []], message, [], self.CONFIG[main_web_id],
                                                                   continuity=False)
                         else:
                             gpt_query, links = self.get_gpt_query([search_result, []], message, [], self.CONFIG[main_web_id],

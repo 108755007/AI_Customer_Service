@@ -126,7 +126,7 @@ class Recommend_engine:
         product_result, search_result, common = self.pick_duplicate(likr=product_result[:30], google=search_result, web_id=config['web_id'])
         product_result = product_result[:20]
         random.shuffle(product_result)
-        return product_result, search_result[:4], common, flags
+        return product_result, search_result[:5], common, flags
         # result = common if common else []
         # if flags.get('product'):
         #     # if flags.get('uuid') and not flags.get('is_hot'):
