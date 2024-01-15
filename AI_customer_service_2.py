@@ -77,6 +77,14 @@ class LangchainSetting:
         return out
 
     def judge_setting(self):
+        self.keyword_prompt ="""You are an AI designed to parse text and output results in JSON format. Your task is to break down user-submitted spoken content into individual words, assign a base point value to each word depending on its perceived importance in common language use, and then double the point value for any word that is identified as a product name. The response should contain no explanatory text or extraneous content, just a JSON object with each word as a key and its associated score as the value. Please use the following schema exclusively for each response:
+
+                                {
+                                  "word1": score1,
+                                  "word2": score2,
+                                  ...
+                                  "wordN": scoreN
+                                }"""
         self.judge_prompt_text = """You are a sophisticated AI designed to output structured data in JSON format. Your task is to analyze customer inquiries submitted via text and determine the corresponding intent. Based on the intent, your output should provide a JSON object with a 'type' field indicating the category of the intent .The intent categories and the expected details for each are as follows:
 
                                     1. 'product_inquiry': Customers may inquire about product features, specifications, prices, and availability. 
@@ -209,7 +217,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$',
                            '^做$', '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦', '吃', '賣', '嘛',
-                           '想', '請問'}
+                           '想', '請問', '多少'}
         # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
@@ -220,16 +228,14 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             return 'no message'
         # segmentation
         # print(message)
-        reply = self.ask_gpt([{'role': 'system',
-                               'content': """I want you to act as a content analyzer for speaking users. You will segment the user's content into individual words, then assign a point value based on the importance of each word. If product names appear within the content, their scores should be doubled. Your responses should strictly follow this format: {"Word": Score}, and there should be no explanations within the responses"""},
-                              {'role': 'user', 'content': f'{message}'}],
-                             model='gpt-4')
+        reply = self.ask_gpt([{'role': 'system', 'content': self.keyword_prompt}, {'role': 'user', 'content': f'{message}'}], json_format=True)
         if reply == 'timeout':
             return 'timeout'
         ####TODO(yu):perhaps have problem
         try:
             keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if
                             k in message and not any(re.search(w, k) for w in forbidden_words)]
+            print('關鍵字獲取錯誤')
         except:
             keyword_list = analyse.extract_tags(message, topK=2)
 
