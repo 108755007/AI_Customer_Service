@@ -276,16 +276,24 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     break
                 except:
                     k += 1
+        k = 0
+        while True:
+            if k > 10:
+                print('關鍵字獲取錯誤')
+                keyword_list = analyse.extract_tags(message, topK=2)
+                break
+            try:
+                reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt},
+                                              {'role': 'user', 'content': f'{message}'}], json_format=True)
+                if reply == 'timeout':
+                    k += 1
+                    continue
+                keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
+                print(f"gpt成功獲取關鍵字")
+                break
+            except:
+                k += 1
 
-        reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt}, {'role': 'user', 'content': f'{message}'}], json_format=True)
-        if reply == 'timeout':
-            return 'timeout'
-        ####TODO(yu):perhaps have problem
-        try:
-            keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
-        except:
-            print('關鍵字獲取錯誤')
-            keyword_list = analyse.extract_tags(message, topK=2)
         return keyword_list
 
     def avivid_user_id(self):
