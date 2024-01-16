@@ -104,6 +104,27 @@ class LangchainSetting:
                                       'type': 'product_inquiry'
                                     }
                                     Please analyze the customer's text input and provide an appropriate JSON response."""
+
+        self.get_keyword_prompt="""You are an intelligent assistant designed to parse and structure information into JSON format. Upon receiving a customer's question, your task is to identify key components of the query: the product name (short form), the type of information requested, and the action the customer requires assistance with. Please rank these elements by importance, with "1" being the most important. Use the following format:
+
+                                    ```json
+                                    {
+                                      "1": "Most important keyword or phrase",
+                                      "2": "Second important keyword or phrase",
+                                      "3": "Third important keyword or phrase",
+                                      // Continue as needed
+                                    }
+                                    ```
+                                    
+                                    For example, if the customer asks, "How do I reset my QuickHeat thermostat when the screen is unresponsive?", the output should be:
+                                    
+                                    ```json
+                                    {
+                                      "1": "QuickHeat thermostat",
+                                      "2": "reset",
+                                      "3": "screen is unresponsive"
+                                    }
+                                    ```"""
         response_schemas = [ResponseSchema(name="Inquiry about product information",
                                            description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
                             ResponseSchema(name="Requesting returns or exchanges",
@@ -228,13 +249,12 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             return 'no message'
         # segmentation
         # print(message)
-        reply = self.ask_gpt([{'role': 'system', 'content': self.keyword_prompt}, {'role': 'user', 'content': f'{message}'}], json_format=True)
+        reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt}, {'role': 'user', 'content': f'{message}'}], json_format=True)
         if reply == 'timeout':
             return 'timeout'
         ####TODO(yu):perhaps have problem
         try:
-            keyword_list = [k for k, _ in sorted(eval(reply).items(), key=lambda x: x[1], reverse=True) if
-                            k in message and not any(re.search(w, k) for w in forbidden_words)]
+            keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
             print('關鍵字獲取錯誤')
         except:
             keyword_list = analyse.extract_tags(message, topK=2)
