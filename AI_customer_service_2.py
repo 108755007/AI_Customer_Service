@@ -125,6 +125,16 @@ class LangchainSetting:
                                       "3": "screen is unresponsive"
                                     }
                                     ```"""
+        self.translation_prompt="""You are an AI assistant designed to translate non-English input text into English and return the response in JSON format. Upon receiving text, please identify the language, translate it into English, and output the translation in a structured JSON object that includes the  the English translation.
+                                
+                                    Example input:
+                                    "Hola, ¿cómo estás?"
+                                    
+                                    Expected JSON output:
+                                    {
+                                      "translation": "Hello, how are you?"
+                                    }
+                                    """
         response_schemas = [ResponseSchema(name="Inquiry about product information",
                                            description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
                             ResponseSchema(name="Requesting returns or exchanges",
@@ -234,7 +244,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         return
 
     @cost_time
-    def get_keyword(self, message: str, web_id: str) -> list:
+    def get_keyword(self, message: str, web_id: str,lang: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$',
                            '^做$', '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦', '吃', '賣', '嘛',
@@ -249,16 +259,33 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             return 'no message'
         # segmentation
         # print(message)
+        k = 0
+        if web_id in {'AviviD', 'avividai'} and lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語']:
+            print("###關鍵字需要變成英文###")
+            while True:
+                if k > 10:
+                    break
+                try:
+                    reply = self.ask_gpt(message=[{'role': 'system', 'content': self.translation_prompt},
+                                                  {'role': 'user', 'content': f'{message}'}], json_format=True)
+                    if reply == 'timeout':
+                        k += 1
+                        continue
+                    message = eval(reply).get('translation')
+                    print(f"###f'翻譯後的文本{message}'###")
+                    break
+                except:
+                    k += 1
+
         reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt}, {'role': 'user', 'content': f'{message}'}], json_format=True)
         if reply == 'timeout':
             return 'timeout'
         ####TODO(yu):perhaps have problem
         try:
             keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
-            print('關鍵字獲取錯誤')
         except:
+            print('關鍵字獲取錯誤')
             keyword_list = analyse.extract_tags(message, topK=2)
-
         return keyword_list
 
     def avivid_user_id(self):
@@ -360,7 +387,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         hash_ = user_id
         now_timestamps = int(datetime.datetime.timestamp(datetime.datetime.now()))
         print(f"{hash_},輸入訊息：{message}")
-        keyword_list, keyword_time = self.get_keyword(message, main_web_id)
+        keyword_list, keyword_time = self.get_keyword(message, main_web_id,lang)
         if isinstance(keyword_list, str):
             print(f'{hash_},獲取關鍵字錯誤')
             update_error(web_id, user_id, message, 'keyword', now_timestamps)
@@ -414,6 +441,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                                               continuity=False)
                         if len(common) > 1:
                             self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id)
+                        else:
+                            self.update_recommend_status(web_id, user_id, 1, product_result[0], main_web_id=main_web_id)
                     elif search_result:
                         gpt_query, links = self.get_gpt_query([search_result[:1], []], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
