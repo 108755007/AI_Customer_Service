@@ -454,6 +454,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
 
             # Step 3: response from ChatGPT
             else:
+                recommend_product = product_result[-1] if len(product_result) > 0 else {}
                 if find_dpa:
                     if common:
                         gpt_query, links = self.get_gpt_query([common[:1], []], message, [], self.CONFIG[main_web_id],
@@ -461,16 +462,16 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                         if len(common) > 1:
                             self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id)
                         else:
-                            self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
+                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                     elif search_result:
                         gpt_query, links = self.get_gpt_query([search_result[:1], []], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
-                        self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
+                        self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                     elif product_result:
                         gpt_query, links = self.get_gpt_query([product_result[:1], []], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
                         if len(product_result) > 1:
-                            self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
+                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                         else:
                             self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
                     else:
