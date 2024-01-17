@@ -110,18 +110,16 @@ class Recommend_engine:
 
     def pick_duplicate(self, likr: list[dict], google: list[dict], web_id: str):
         urlencode = UrlEncode(web_id=web_id)
-        likr_id = {urlencode.signature_translate(item.get('link'),web_id=web_id): i for i, item in enumerate(likr)}
+        likr_id = {urlencode.signature_translate(item.get('link'), web_id=web_id): i for i, item in enumerate(likr)}
         google_id = {urlencode.signature_translate(item.get('link'), web_id=web_id): i for i, item in enumerate(google)}
         common_id = [id for id in likr_id if id in google_id]
+        common = [item for i, item in enumerate(likr) if i in [likr_id[id] for id in common_id]]
         likr = [item for i, item in enumerate(likr) if i not in [likr_id[id] for id in common_id]]
         google = [item for i, item in enumerate(google) if i not in [google_id[id] for id in common_id]]
-        common = [item for i, item in enumerate(likr) if i in [likr_id[id] for id in common_id]]
         return likr, google, common
 
     def likr_recommend(self, search_result: list[dict], keywords: list, flags: dict, config: dict):
-        print(flags)
         product_ids = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
-        print(flags)
         product_result = self.fetch_data(product_ids=product_ids, web_id=config['web_id'])
         product_result, search_result, common = self.pick_duplicate(likr=product_result[:30], google=search_result, web_id=config['web_id'])
         product_result = product_result[:20]

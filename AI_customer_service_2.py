@@ -423,11 +423,11 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             if search_result:
                 gpt_query, links = self.get_gpt_query([search_result, []], message, [], self.CONFIG[main_web_id],
                                                       continuity=False)
-                self.update_recommend_status(web_id, user_id, 1, '', lang, main_web_id=main_web_id)
+                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
             else:
                 gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
                                                       continuity=False)
-                self.update_recommend_status(web_id, user_id, 1, '', lang, main_web_id=main_web_id)
+                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
 
         else:
             product_result, search_result, common, flags = self.Recommend.likr_recommend(search_result=result[0],
@@ -436,6 +436,17 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                                                                          config=self.CONFIG[main_web_id])
             if common:
                 print(f"{hash_},有推薦類品")
+            else:
+                print(f"{hash_},無推薦類品")
+            if product_result:
+                print(f"{hash_},likr有商品")
+            else:
+                print(f"{hash_},likr無商品")
+            if search_result:
+                print(f"{hash_},google有商品")
+            else:
+                print(f"{hash_},google無商品")
+
                 
             if len(result) == 0 and self.CONFIG[main_web_id]['mode'] == 2:
                 gpt_query = [{'role': 'user', 'content': message}]
@@ -450,21 +461,23 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                         if len(common) > 1:
                             self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id)
                         else:
-                            self.update_recommend_status(web_id, user_id, 1, product_result[0], main_web_id=main_web_id)
+                            self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
                     elif search_result:
                         gpt_query, links = self.get_gpt_query([search_result[:1], []], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
-                        self.update_recommend_status(web_id, user_id, 1, product_result[0], main_web_id=main_web_id)
-                    elif product_result:
-                        gpt_query, links = self.get_gpt_query([product_result[:1], []], message, [],
-                                                              self.CONFIG[main_web_id],
-                                                              continuity=False)
                         self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
+                    elif product_result:
+                        gpt_query, links = self.get_gpt_query([product_result[:1], []], message, [], self.CONFIG[main_web_id],
+                                                              continuity=False)
+                        if len(product_result) > 1:
+                            self.update_recommend_status(web_id, user_id, 1, product_result[-1], main_web_id=main_web_id)
+                        else:
+                            self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
                     else:
                         print(f'{hash_},找不到商品')
                         gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
-                        self.update_recommend_status(web_id, user_id, 1, product_result[0], main_web_id=main_web_id)
+                        self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
 
                 else:
                     if search_result:
@@ -478,7 +491,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     else:
                         gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
                                                               continuity=False)
-                    self.update_recommend_status(web_id, user_id, 1, product_result[0], main_web_id=main_web_id)
+                    self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
 
         query_time = time.time() - query_start
         gpt_start = time.time()
