@@ -90,14 +90,12 @@ class Util(QA_api):
             partial_variables={"format_instructions": format_instructions}
         )
 
-    def title_model_setting(self):
+    def title_model_setting(self, eng):
         self.title_1_prompt = """
-                                You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate a creative title that includes at least one of the provided keywords. The title must not contain any references to news websites. Please respond in language entered. The JSON output should follow this format:
-                                
+                                You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate a creative title that includes at least one of the provided keywords. The title must not contain any references to news websites.
                                 {
                                   "title": "Your Generated Title Including the Keyword"
                                 }
-                                
                                 Please generate a title and output the response in JSON format."""
         self.title_5_prompt = """
                                 You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate five creative titles that includes at least one of the provided keywords. The title must not contain any references to news websites. Please respond in language entered. The JSON output should follow this format:
@@ -328,11 +326,14 @@ class AiTraffic(Util):
         keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(
             web_id, keywords)
         prompt = ''.join([f""" "keyword":{i}\n "description":{v}\n\n""" for i, v in keyword_info_dict.items()])
+        sys_prompt = self.title_1_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.title_1_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
+
         if types == 1:
             k = 0
             while True:
                 try:
-                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.title_1_prompt},
+
+                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sys_prompt},
                                                   {'role': 'user', 'content': f'{prompt}'}], json_format=True)
                     title = eval(result).get('title')
                     break
