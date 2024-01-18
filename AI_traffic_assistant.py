@@ -8,12 +8,11 @@ from AI_customer_service import QA_api
 from langchain.output_parsers import RetryWithErrorOutputParser
 from opencc import OpenCC
 from langchain.output_parsers import PydanticOutputParser
-from langchain.prompts.chat import SystemMessage
+from langchain.schema import SystemMessage
 from langchain.output_parsers import StructuredOutputParser, ResponseSchema
 from langchain.prompts import PromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate
 from langchain.chains import LLMChain
-from lanchain_class import title_1, title_5, sub_title
-from langchain.chat_models import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI
 import json
 import os
 import random
@@ -27,10 +26,10 @@ class Util(QA_api):
         self.dateint = self.get_data_intdate(7)
         self.azure_openai_setting()
         self.langchain_model_setting()
-        self.chat_check_model = AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0)
-        self.article_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-35')
-        self.article_model_16k = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-35-16k')
-        self.article_4_model = AzureChatOpenAI(temperature=0.2, deployment_name='chat-cs-canada-4')
+        self.chat_check_model = AzureChatOpenAI(azure_deployment="chat-cs-canada-4", temperature=0, openai_api_version="2023-12-01-preview")
+        self.article_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35', openai_api_version="2023-12-01-preview")
+        self.article_model_16k = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35-16k', openai_api_version="2023-12-01-preview")
+        self.article_4_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-4', openai_api_version="2023-12-01-preview")
 
     def get_data_intdate(self, time_delay):
         return int(str(datetime.date.today() - datetime.timedelta(time_delay)).replace('-', ''))
@@ -92,106 +91,38 @@ class Util(QA_api):
         )
 
     def title_model_setting(self):
-        output_parser_1 = PydanticOutputParser(pydantic_object=title_1)
-        output_parser_5 = PydanticOutputParser(pydantic_object=title_5)
-        output_parser_sub = PydanticOutputParser(pydantic_object=sub_title)  # 用于对输出格式化
-        format_instructions_sub = output_parser_sub.get_format_instructions()
-        format_instructions_1 = output_parser_1.get_format_instructions()
-        format_instructions_5 = output_parser_5.get_format_instructions()
-        template_1 = """
-        你會根據關鍵字和關鍵字來源產生1個標題
-
-        {keyword_info}
-
-        標題一定要包含關鍵字,標題禁止包含任何新聞網,繁體中文回答
-
-        -----
-        {format_instructions}
-        """
-        template_5 = """
-        你會根據關鍵字和關鍵字來源產生5個標題
-
-        {keyword_info}
-
-        標題一定要包含關鍵字,標題禁止包含任何新聞網,繁體中文回答
-
-        -----
-        {format_instructions}
-        """
-        template_sub = """
-        請從主標題,生成與該主題相關的5個副標題
-
-        主標題:{title}
-
-        -----
-        {format_instructions}
-        """
-        template_1_eng = """
-        Generate 1 titles based on keywords and their sources.
-        
-        {keyword_info}
-        
-        The titles must include the keywords and should not contain any news websites.
-
-        -----
-        {format_instructions}
-        """
-        template_5_eng = """
-        Generate 5 titles based on keywords and their sources.
-        
-        {keyword_info}
-        
-        The titles must include the keywords and should not contain any news websites.
-
-        -----
-        {format_instructions}
-        """
-        prompt_1 = PromptTemplate(  # 设置prompt模板，用于格式化输入
-            template=template_1,
-            input_variables=["keyword_info"],
-            partial_variables={"format_instructions": format_instructions_1}
-        )
-        prompt_5 = PromptTemplate(  # 设置prompt模板，用于格式化输入
-            template=template_5,
-            input_variables=["keyword_info"],
-            partial_variables={"format_instructions": format_instructions_5}
-        )
-        prompt_1_eng = PromptTemplate(  # 设置prompt模板，用于格式化输入
-            template=template_1_eng,
-            input_variables=["keyword_info"],
-            partial_variables={"format_instructions": format_instructions_1}
-        )
-        prompt_5_eng = PromptTemplate(  # 设置prompt模板，用于格式化输入
-            template=template_5_eng,
-            input_variables=["keyword_info"],
-            partial_variables={"format_instructions": format_instructions_5}
-        )
-        prompt_sub = PromptTemplate(  # 设置prompt模板，用于格式化输入
-            template=template_sub,
-            input_variables=["title"],
-            partial_variables={"format_instructions": format_instructions_sub}
-        )
-        self.title_chain_1 = LLMChain(prompt=prompt_1,
-                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
-                                      output_parser=output_parser_1)
-        self.title_chain_5 = LLMChain(prompt=prompt_5,
-                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
-                                      output_parser=output_parser_5)
-        self.title_chain_1_eng = LLMChain(prompt=prompt_1_eng,
-                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
-                                      output_parser=output_parser_1)
-        self.title_chain_5_eng = LLMChain(prompt=prompt_5_eng,
-                                      llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
-                                      output_parser=output_parser_5)
-        self.title_chain_sub = LLMChain(prompt=prompt_sub,
-                                        llm=AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0),
-                                        output_parser=output_parser_sub)
-
+        self.title_1_prompt = """
+                                You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate a creative title that includes at least one of the provided keywords. The title must not contain any references to news websites. Please respond in language entered. The JSON output should follow this format:
+                                
+                                {
+                                  "title": "Your Generated Title Including the Keyword"
+                                }
+                                
+                                Please generate a title and output the response in JSON format."""
+        self.title_5_prompt = """
+                                You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate five creative titles that includes at least one of the provided keywords. The title must not contain any references to news websites. Please respond in language entered. The JSON output should follow this format:
+                                {
+                                  "title_1": "Your Generated Title Including the Keyword"
+                                  "title_2": "Your Generated Title Including the Keyword"
+                                  "title_3": "Your Generated Title Including the Keyword"
+                                  "title_4": "Your Generated Title Including the Keyword"
+                                  "title_5": "Your Generated Title Including the Keyword"
+                                }
+                                Please generate a title and output the response in JSON format.        
+                                """
+        self.sub_title_prompt = """
+                                You will act as a JSON generator. I will give you a title, and you are to create five sub-titles related to the given title. Please format your response in JSON, with each sub-title as a separate, numbered field. Here is the structure I need:
+                                {
+                                    "sub_title_1": "Your Generated Sub-Title 1",
+                                    "sub_title_2": "Your Generated Sub-Title 2",
+                                    "sub_title_3": "Your Generated Sub-Title 3",
+                                    "sub_title_4": "Your Generated Sub-Title 4",
+                                    "sub_title_5": "Your Generated Sub-Title 5"
+                                }
+                                """
     def azure_openai_setting(self):
-        os.environ['OPENAI_API_KEY'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
-        os.environ['OPENAI_API_TYPE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_type')
-        os.environ['OPENAI_API_BASE'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_base')
-        os.environ['OPENAI_API_VERSION'] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_version')
+        os.environ["AZURE_OPENAI_API_KEY"] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
+        os.environ["AZURE_OPENAI_ENDPOINT"] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_base')
 
     def translation_stw(self, text):
         cc = OpenCC('likr-s2twp')
@@ -243,8 +174,8 @@ class Util(QA_api):
             Title: "{title}"
             """
         else:
-            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way."""
-            #prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style """
+            #prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style and in Taiwan Mandarin. Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way."""
+            prompt = f"""Please use the following provided information to craft concise article of approximately {str(len(sub_list)*2)}00 words, including the title, subtitles, keywords, keyword explanations,Target Audience, and other relevant details. The article should be written in an {style} style """
             if not eng:
                 prompt += "and in Taiwan Mandarin"
             prompt += f""". Ensure that proper grammar and sentence structure are maintained throughout.Please ensure that the subtitles are not altered in any way.
@@ -363,6 +294,7 @@ class AiTraffic(Util):
 
     def get_keyword_pd(self):
         pbar = tqdm(list(self.web_id_dict.keys()))
+        pbar = tqdm(['hhoversea', 'nineyi000360'])
         for i, web_id in enumerate(pbar):
             pbar.set_description(web_id)
             self.all_keyword_pd[web_id] = self.get_keyword_data(web_id)
@@ -388,17 +320,28 @@ class AiTraffic(Util):
         return False
 
     def get_title(self, web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '',
-                  article: str = None, types: int = 1, eng=False):
+                  article: str = None, types: int = 1, eng: bool = False):
         print(f"""輸入web_id:{web_id}""")
         # check_keyword = self.check_keyword(keywords, web_id_main) if web_id_main else self.check_keyword(keywords, web_id)
         # if not check_keyword:
         #     pass
         keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(
             web_id, keywords)
-        prompt = ''.join([f"關鍵字:{i}\n'{i}'關鍵字的來源:{v[0]}\n\n" for i, v in keyword_info_dict.items()])
+        prompt = ''.join([f""" "keyword":{i}\n "description":{v}\n\n""" for i, v in keyword_info_dict.items()])
         if types == 1:
-            result = self.title_chain_1.run({'keyword_info': prompt}) if not eng else self.title_chain_1_eng.run({'keyword_info': prompt})
-            title = self.translation_stw(result.title) if not eng else result.title
+            k = 0
+            while True:
+                try:
+                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.title_1_prompt},
+                                                  {'role': 'user', 'content': f'{prompt}'}], json_format=True)
+                    title = eval(result).get('title')
+                    break
+                except:
+                    if k == 10:
+                        title = '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！'
+                        break
+                    k += 1
+            title = self.translation_stw(title) if not eng else title
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps(
                 [{'keyword': keyword, 'title': data[0], 'web_id': data[2], 'url': data[3], 'image': data[4]} for
                  keyword, data in keyword_info_dict.items()]), datetime.datetime.now()]],
@@ -409,34 +352,60 @@ class AiTraffic(Util):
         else:
             if not article:
                 return {"message": "no article input"}
-            result = self.title_chain_5.run({'keyword_info': prompt}) if not eng else self.title_chain_5_eng.run({'keyword_info': prompt})
+            k = 0
+            while True:
+                try:
+                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.title_5_prompt},
+                                                           {'role': 'user', 'content': f'{prompt}'}], json_format=True)
+                    title = eval(result)
+                    break
+                except:
+                    if k == 10:
+                        title = {'title_1': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
+                                 'title_2': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
+                                 'title_3': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
+                                 'title_4': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
+                                 'title_5': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！'}
+                        break
+                    k += 1
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords,
-                                                         self.translation_stw(result.title[0]),
-                                                         self.translation_stw(result.title[1]),
-                                                         self.translation_stw(result.title[2]),
-                                                         self.translation_stw(result.title[3]),
-                                                         self.translation_stw(result.title[4]), article, 2]],
+                                                         self.translation_stw(title['title_1']),
+                                                         self.translation_stw(title['title_2']),
+                                                         self.translation_stw(title['title_3']),
+                                                         self.translation_stw(title['title_4']),
+                                                         self.translation_stw(title['title_5']), article, 2]],
                                                        columns=['user_id', 'web_id', 'type', 'inputs', 'subheading_1',
                                                                 'subheading_2', 'subheading_3', 'subheading_4',
                                                                 'subheading_5', 'article_1', 'article_step']),
                                           db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
-            return result.title
+            return list(title.values())
 
     def get_sub_title(self, title: str = '', user_id: str = '', web_id: str = 'test', types: int = 1):
         print(f"""獲取副標題,標題為:{title}""")
-        result = self.title_chain_sub.run({'title': title})
-        print(f"""副標題產生成功,副標題為:{result.sub_title}""")
-        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, title, result.sub_title[0],
-                                                     result.sub_title[1], result.sub_title[2], result.sub_title[3],
-                                                     result.sub_title[4]]],
+        k = 0
+        while True:
+            try:
+                result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.sub_title_prompt},
+                                                       {'role': 'user', 'content': f'{title}'}], json_format=True)
+                sub_title_dict = eval(result)
+                break
+            except:
+                if k == 10:
+                    return
+                    break
+                k += 1
+        print(f"""副標題產生成功,副標題為:{sub_title_dict}""")
+        DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, title, sub_title_dict.get('sub_title_1'),
+                                                     sub_title_dict.get('sub_title_2'), sub_title_dict.get('sub_title_3'),
+                                                     sub_title_dict.get('sub_title_4'), sub_title_dict.get('sub_title_5')]],
                                                    columns=['user_id', 'web_id', 'type', 'title', 'subheading_1',
                                                             'subheading_2', 'subheading_3', 'subheading_4',
                                                             'subheading_5']), db='sunscribe', table='ai_article',
                                       chunk_size=100000, is_ssh=False)
-        return {i + 1: v for i, v in enumerate(result.sub_title)}
+        return {a+1: b for a, b in enumerate(sub_title_dict.values())}
 
     def generate_articles(self, title: str = '', subtitle_list: list = [], keywords: str = '', user_id: str = '',
-                          web_id: str = 'test', types: int = 1, ta: list = [], eng=False):
+                          web_id: str = 'test', types: int = 1, ta: list = [], eng: bool = False):
         query = f"SELECT keyword_dict  FROM web_push.ai_article WHERE web_id = '{web_id}' and user_id  ='{user_id}'"
         keyword_info_db = DBhelper('sunscribe').ExecuteSelect(query)
         sub_list = [i for i in subtitle_list if i]

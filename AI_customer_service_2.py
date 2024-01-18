@@ -53,28 +53,7 @@ class LangchainSetting:
     def __init__(self):
         self.des_prompt = None
         self.des_output_parser = None
-        self.check_prompt = ChatPromptTemplate
-        self.chat_model_4 = AzureChatOpenAI(deployment_name="chat-cs-canada-4", temperature=0.2)
-        self.judge_prompt = PromptTemplate
-        self.judge_output = StructuredOutputParser
-        self.setting_langchain()
         self.ai_des_setting()
-
-    def setting_langchain(self):
-        self.judge_setting()
-
-    def get_judge(self, message):
-        start = time.time()
-        _input = self.judge_prompt.format_prompt(question=message)
-        output = self.chat_model_4(_input.to_messages())
-        try:
-            out = self.judge_output.parse(output.content)
-        except OutputParserException:
-            out = {'Inquiry about product information': 'False', 'Requesting returns or exchanges': 'False',
-                   'Complaints or issue feedback': 'False', 'General inquiries': 'False',
-                   'Simple Greeting or Introduction': 'False', 'Simple expression of gratitude': 'False',
-                   'Unable to determine intent or other': 'True'}
-        return out
 
     def judge_setting(self):
         self.keyword_prompt ="""You are an AI designed to parse text and output results in JSON format. Your task is to break down user-submitted spoken content into individual words, assign a base point value to each word depending on its perceived importance in common language use, and then double the point value for any word that is identified as a product name. The response should contain no explanatory text or extraneous content, just a JSON object with each word as a key and its associated score as the value. Please use the following schema exclusively for each response:
@@ -135,27 +114,10 @@ class LangchainSetting:
                                       "translation": "Hello, how are you?"
                                     }
                                     """
-        response_schemas = [ResponseSchema(name="Inquiry about product information",
-                                           description="If Customers may want to understand product features, specifications, prices, and other details return 'True' else 'False'"),
-                            ResponseSchema(name="Requesting returns or exchanges",
-                                           description="If Customers may need to return or exchange products they have purchased and want to understand the return and exchange policies and procedures.return 'True' else 'False'"),
-                            ResponseSchema(name="General inquiries",
-                                           description="If Customers may have general questions about the company, services, policies, or other related topics return 'True' else 'False'"),
-                            ResponseSchema(name="Simple Greeting or Introduction",
-                                           description="If customers initiate a simple greeting or introduction, return 'True' else 'False'"),
-                            ResponseSchema(name="Simple expression of gratitude",
-                                           description="If customers express simple gratitude for help, return 'True' else 'False'"),
-                            ResponseSchema(name="Unable to determine intent or other",
-                                           description="If unable to determine user intent or other situations, return 'True', else 'False'")]
-        self.judge_output = StructuredOutputParser.from_response_schemas(response_schemas)
-        format_instructions = self.judge_output.get_format_instructions()
-        self.judge_prompt = PromptTemplate(
-            template=" $You are a customer intent analysis chatbot. Please analyze the customer's intent.\n{format_instructions}\n{question}",
-            input_variables=["question"],
-            partial_variables={"format_instructions": format_instructions}
-        )
 
     def ai_des_setting(self):
+        pass
+        return
         response_schemas = [ResponseSchema(name="descriptions", description="根據<商品標題>產生的<商品敘述>"), ]
         self.des_output_parser = StructuredOutputParser.from_response_schemas(response_schemas)
         format_instructions = self.des_output_parser.get_format_instructions()
@@ -248,7 +210,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$',
                            '^做$', '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦', '吃', '賣', '嘛',
-                           '想', '請問', '多少'}
+                           '想', '請問', '多少', '是'}
         # remove web_id from message
         message = translation_stw(message).lower()
         for i in [web_id, self.CONFIG[web_id]['web_name']] + eval(self.CONFIG[web_id]['other_name']):
@@ -289,7 +251,12 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     k += 1
                     continue
                 keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
+                if len(keyword_list) == 0:
+                    keyword_list = [k for _, k in eval(reply).items() if not any(re.search(w, k) for w in forbidden_words)]
+                    print('此商品使用gpt修正關鍵字')
                 print(f"gpt成功獲取關鍵字")
+                if len(keyword_list) == 0:
+                    print('但此商品無關鍵字！！')
                 break
             except:
                 k += 1
