@@ -90,7 +90,7 @@ class Util(QA_api):
             partial_variables={"format_instructions": format_instructions}
         )
 
-    def title_model_setting(self, eng):
+    def title_model_setting(self):
         self.title_1_prompt = """
                                 You are a helpful AI designed to output JSON-formatted responses. Given a set of keywords and their descriptions, your task is to generate a creative title that includes at least one of the provided keywords. The title must not contain any references to news websites.
                                 {
