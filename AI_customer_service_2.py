@@ -54,7 +54,7 @@ class LangchainSetting:
         self.des_prompt = None
         self.des_output_parser = None
         self.ai_des_setting()
-
+        self.judge_setting()
     def judge_setting(self):
         self.keyword_prompt ="""You are an AI designed to parse text and output results in JSON format. Your task is to break down user-submitted spoken content into individual words, assign a base point value to each word depending on its perceived importance in common language use, and then double the point value for any word that is identified as a product name. The response should contain no explanatory text or extraneous content, just a JSON object with each word as a key and its associated score as the value. Please use the following schema exclusively for each response:
 
