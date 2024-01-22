@@ -218,7 +218,7 @@ class AiTraffic(Util):
 
     def get_keyword_info(self, web_id, keyword):
         print(f"""獲取{web_id}的關鍵字資訊""")
-        if web_id not in self.web_id_dict or web_id == 'pure17':
+        if web_id not in self.web_id_dict or web_id == 'pure17' or web_id not in self.all_keyword_pd:
             print(f"""不包含{web_id}的關鍵字資訊,更改為base_web_id:{self.base_web_id}""")
             web_id = self.base_web_id
         keyword_list = keyword.split(',')
@@ -292,7 +292,7 @@ class AiTraffic(Util):
 
     def get_keyword_pd(self):
         pbar = tqdm(list(self.web_id_dict.keys()))
-        #pbar = tqdm(['hhoversea', 'nineyi000360'])
+        #pbar = tqdm(['innolife', 'nineyi000360'])
         for i, web_id in enumerate(pbar):
             pbar.set_description(web_id)
             self.all_keyword_pd[web_id] = self.get_keyword_data(web_id)
