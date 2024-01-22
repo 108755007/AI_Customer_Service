@@ -174,7 +174,7 @@ class ChatGPT_AVD:
         '''
         result = result[0] + result[1]
         gpt_query = [{"role": "system",
-                      "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}"}]
+                      "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']},如果是有關於存貨,庫存的問題,請客人到官網進行確認"}]
         links = []
         if type(result) != str:
             chatgpt_query = f"""You are a GPT-4 customer service robot for "{web_id_conf['web_name']}". Your task is to respond to customer inquiries in 繁體中文. Always start with "親愛的顧客您好，" and end with "祝您愉快！". Your objective is to provide useful, accurate and concise information that will help the customer with their concern or question. You have to use information from the information provided, use bullet points for each different subject, and use the [number] notation to cite sources in the end of sentences. Do not generating content that is not directly related to the customer's questions,inventory issues,any information about pricing.\n Information:"""
@@ -195,7 +195,7 @@ class ChatGPT_AVD:
                         'og:description'):
                     chatgpt_query += f""",description = {v.get('pagemap').get('metatags')[0].get('og:description')}" """
                 links.append((i, url, v.get('title')))
-            chatgpt_query += f"""Customer question:{message}\nRemind again Do not generating content that is not directly related to the customer's questions,inventory issues,any information about pricing."""
+            chatgpt_query += f"""Customer question:{message}\nRemind again Do not generating content that is not directly related to the customer's questions,inventory issues,any information about pricing.\n如果是有關於存貨,庫存的問題,請客人到官網進行確認"""
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         # chatgpt_query = chatgpt_query if not continuity else self.get_continue_query(message,history)
