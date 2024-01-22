@@ -326,9 +326,8 @@ class AiTraffic(Util):
         keyword_info_dict = self.get_keyword_info(web_id_main, keywords) if web_id_main else self.get_keyword_info(
             web_id, keywords)
         prompt = ''.join([f""" "keyword":{i}\n "description":{v}\n\n""" for i, v in keyword_info_dict.items()])
-        sys_prompt = self.title_1_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.title_1_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
-
         if types == 1:
+            sys_prompt = self.title_1_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.title_1_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
             k = 0
             while True:
                 try:
@@ -351,12 +350,13 @@ class AiTraffic(Util):
                                           table='ai_article', chunk_size=100000, is_ssh=False)
             return [title]
         else:
+            sys_prompt = self.title_5_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.title_5_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
             if not article:
                 return {"message": "no article input"}
             k = 0
             while True:
                 try:
-                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.title_5_prompt},
+                    result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sys_prompt},
                                                            {'role': 'user', 'content': f'{prompt}'}], json_format=True)
                     title = eval(result)
                     break
@@ -374,10 +374,10 @@ class AiTraffic(Util):
                                                          self.translation_stw(title['title_2']),
                                                          self.translation_stw(title['title_3']),
                                                          self.translation_stw(title['title_4']),
-                                                         self.translation_stw(title['title_5']), article, 2]],
+                                                         self.translation_stw(title['title_5']), article, 2, datetime.datetime.now()]],
                                                        columns=['user_id', 'web_id', 'type', 'inputs', 'subheading_1',
                                                                 'subheading_2', 'subheading_3', 'subheading_4',
-                                                                'subheading_5', 'article_1', 'article_step']),
+                                                                'subheading_5', 'article_1', 'article_step', 'add_time']),
                                           db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
             return list(title.values())
 
