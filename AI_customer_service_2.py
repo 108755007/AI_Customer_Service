@@ -186,7 +186,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             {"role": "system", "content": self.judge_prompt_text},
             {"role": "user", "content": message}
         ]
-        ans = self.ask_gpt(message=messages, azure=False)
+        ans = self.ask_gpt(message=messages)
         try:
             return eval(ans).get('type').lower()
         except:
@@ -229,7 +229,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     break
                 try:
                     reply = self.ask_gpt(message=[{'role': 'system', 'content': self.translation_prompt},
-                                                  {'role': 'user', 'content': f'{message}'}], json_format=True, azure=False)
+                                                  {'role': 'user', 'content': f'{message}'}], json_format=True)
                     if reply == 'timeout':
                         k += 1
                         continue
@@ -246,7 +246,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 break
             try:
                 reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt},
-                                              {'role': 'user', 'content': f'{message}'}], json_format=True, azure=False)
+                                              {'role': 'user', 'content': f'{message}'}], json_format=True)
                 if reply == 'timeout':
                     k += 1
                     continue
@@ -465,7 +465,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         gpt_start = time.time()
         print(f"""{hash_}:gpt輸入：{gpt_query}""")
         gpt_answer = translation_stw(
-            self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60, azure=False)).replace('，\n', '，')
+            self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60)).replace('，\n', '，')
 
         gpt_time = time.time() - gpt_start
         print(f"""{hash_}:gpt回答：{gpt_answer}""")
