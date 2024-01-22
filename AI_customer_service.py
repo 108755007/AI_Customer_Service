@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os, traceback, re, json, time
 import pandas as pd
+from openai import OpenAI
 from datetime import datetime
 from func_timeout import func_timeout
 import jieba
@@ -24,28 +25,51 @@ class ChatGPT_AVD:
         self.OPEN_AI_KEY_DICT = eval(os.getenv('OPENAI_API_KEY'))
         self.AZURE_OPENAI_CONFIG = eval(os.getenv('AZURE_OPENAI_CONFIG'))
         self.AZURE_client = self.set_azure_client()
+        self.openai_client = self.set_openai_client()
 
     def get_keys(func):
-        def inner(self, message, model="gpt-3.5-turbo", timeout=60, debug=False, json_format=False):
-            if model == "gpt-4":
-                model_name = 'chat-cs-canada-4'
-            elif model == "gpt-3.5-turbo-16k":
-                model_name = "chat-cs-canada-35-16k"
-            elif model == "gpt-4-32k":
-                model_name = "chat-cs-canada-4-32"
-            elif model == 'gpt-text':
-                model_name = "chat-cs-canada-text"
-            elif model == 'gpt-4-pre':
-                model_name = "chat-cs-canada-4-Preview"
+        def inner(self, message, model="gpt-3.5-turbo", timeout=60, debug=False, json_format=False, azure=True):
+            if azure:
+                if model == "gpt-4":
+                    model_name = 'chat-cs-canada-4'
+                elif model == "gpt-3.5-turbo-16k":
+                    model_name = "chat-cs-canada-35-16k"
+                elif model == "gpt-4-32k":
+                    model_name = "chat-cs-canada-4-32"
+                elif model == 'gpt-text':
+                    model_name = "chat-cs-canada-text"
+                elif model == 'gpt-4-pre':
+                    model_name = "chat-cs-canada-4-Preview"
+                else:
+                    model_name = "chat-cs-canada-35"
+                if debug:
+                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                else:
+                    try:
+                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                    except:
+                        res = 'timeout'
             else:
-                model_name = "chat-cs-canada-35"
-            if debug:
-                res = func_timeout(timeout, func, (self, message, model_name, json_format))
-            else:
-                try:
-                    res = func_timeout(timeout, func, (self, message, model_name, json_format))
-                except:
-                    res = 'timeout'
+                if model == "gpt-4":
+                    model_name = 'gpt-4'
+                elif model == "gpt-3.5-turbo-16k":
+                    model_name = "gpt-3.5-turbo-16k"
+                elif model == "gpt-4-32k":
+                    model_name = "gpt-4-32k"
+                elif model == 'gpt-text':
+                    model_name = "text-embedding-ada-002"
+                elif model == 'gpt-4-pre':
+                    model_name = "gpt-4-1106-preview"
+                else:
+                    model_name = "gpt-3.5-turbo-1106"
+                if debug:
+                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                else:
+                    try:
+                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                    except:
+                        res = 'timeout'
+
             return res
         return inner
 
@@ -57,17 +81,33 @@ class ChatGPT_AVD:
         )
         return client
 
+    def set_openai_client(self):
+        client = OpenAI(
+            api_key=self.OPEN_AI_KEY_DICT[1]
+        )
+        return client
+
 
     @get_keys
-    def ask_gpt(self, message: str, model: str, json_format: bool = False) -> str:
-        if model == "chat-cs-canada-text":
-            response = self.AZURE_client.embeddings.create(input=message, model=model)
-            return response.data[0].embedding
-        kwargs = {'model': model}
-        if json_format:
-            kwargs['response_format'] = {"type": "json_object"}
-        kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
-        response = self.AZURE_client.chat.completions.create(**kwargs)
+    def ask_gpt(self, message: str, model: str, json_format: bool = False, azure: bool = True) -> str:
+        if azure:
+            if model == "chat-cs-canada-text":
+                response = self.AZURE_client.embeddings.create(input=message, model=model)
+                return response.data[0].embedding
+            kwargs = {'model': model}
+            if json_format:
+                kwargs['response_format'] = {"type": "json_object"}
+            kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
+            response = self.AZURE_client.chat.completions.create(**kwargs)
+        else:
+            if model == "text-embedding-ada-002":
+                response = self.openai_client.embeddings.create(input=message, model=model)
+                return response.data[0].embedding
+            kwargs = {'model': model}
+            if json_format:
+                kwargs['response_format'] = {"type": "json_object"}
+            kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
+            response = self.openai_client.chat.completions.create(**kwargs)
         return response.choices[0].message.content
 
     def num_tokens_from_messages(self, messages: list[dict], model: str = "gpt-3.5-turbo") -> int:
