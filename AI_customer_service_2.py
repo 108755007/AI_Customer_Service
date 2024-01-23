@@ -311,22 +311,69 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 [[web_id, group_id, status, recommend, int(datetime.datetime.timestamp(datetime.datetime.now()))]],
                 columns=['web_id', 'group_id', 'status', 'recommend', 'timestamp']), db='jupiter_new',
             table=f'AI_service_recommend_status', is_ssh=False)
+    def get_gpt_query_test(self, result: list, message: str, web_id_conf: dict):
+        gpt_query = [{"role": "system",
+                      "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']},如果是有關於存貨,庫存的問題,請客人到官網進行確認"}]
+        links = []
+        if type(result) != str:
+            chatgpt_query = f"""You are the GPT-4 AI, programmed to serve as a customer service assistant for "禾多移動". Your responses should be in Traditional Chinese and adhere to the following guidelines:
 
+                                1. Start each response with the greeting "親愛的顧客您好，".
+                                2. Provide answers based solely on the information given about AviviD's smart customer service system.
+                                3. Focus on the presented customer concern or question, without straying into unrelated topics.
+                                4. Refrain from generating information about inventory issues and pricing.
+                                5. Direct customers to the official website for inventory or stock-related inquiries.
+                                6. Conclude each response with the closing "祝您愉快！".
+                                7. Do not include any URL in the reply
+
+                                Given Information:"""
+            for i, v in enumerate(result):
+                if not v.get('link'):
+                    continue
+                url = v.get('link')
+                url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
+                if url in links:
+                    continue
+                if v.get('title'):
+                    chatgpt_query += f"""\n\n[{len(links) + 1}] Title: {v.get('title')}\n"""
+                if v.get('snippet'):
+                    chatgpt_query += f"""   Snippet:"{v.get('snippet')}\n"""
+                if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get(
+                        'og:description'):
+                    chatgpt_query += f"""   description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
+                chatgpt_query += f"""URL: {url}\n"""
+                links.append((i, url, v.get('title')))
+            chatgpt_query += f"""Customer Question:{message}
+                                Use the given information to answer the customer’s question, following the response guidelines.
+
+                                json format of reply:
+                                {'{'}
+                                "answer":Your answer",
+                                "Reference_links_used":["url","..."]
+                                {'}'}
+                                #If there is no reference link, "Reference_links_used" can be [] 
+                                """
+        else:
+            chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
+        # chatgpt_query = chatgpt_query if not continuity else self.get_continue_query(message,history)
+
+        #####################################################################################
+        gpt_query += [{'role': 'user', 'content': chatgpt_query}]
+        return gpt_query, links
     def adjust_ans_url_format(self, answer: str, links: list, config: dict) -> str:
-        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+', answer))), key=len, reverse=True)
-        unused_links, product_domain = [], [i.strip('*') for i in config['product_url'].split(',')]
+        url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
+        print(url_set)
         for url in url_set:
             reurl = url
             for char in '?':
                 reurl = reurl.replace(char, '\\' + char)
-            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', self.url_format(url), answer)
-        for i, info in enumerate(links):
-            if re.search(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', answer):
-                answer = re.sub(f'\[#?{i + 1}\](?!.*\[#?{i + 1}\])', f'[{self.url_format(info[1])}]', answer, count=1)
-            elif any([url in info[1] for url in product_domain]):
-                unused_links.append(info)
-        answer = re.sub(f'\[#?\d\]', f'', answer)
-        return answer, unused_links
+            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', f'[{self.url_format(url)}]', answer)
+        if not links and not url_set:
+            answer += f"[{self.url_format(config['web_url'])}]\n"
+        for i in links:
+            if i not in url_set:
+                answer += f"[{self.url_format(i)}]\n"
+        return answer
 
     def answer_append(self, answer: str, unused_links: list) -> str:
         answer_set = set(split_word(answer))
@@ -388,8 +435,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         if main_web_id in {'AviviD', 'avividai'}:
             search_result = result[0][:3]
             if search_result:
-                gpt_query, links = self.get_gpt_query([search_result, []], message, [], self.CONFIG[main_web_id],
-                                                      continuity=False)
+                gpt_query, links = self.get_gpt_query_test(search_result, message, self.CONFIG[main_web_id])
                 self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
             else:
                 gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
@@ -424,62 +470,58 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 recommend_product = product_result[-1] if len(product_result) > 0 else {}
                 if find_dpa:
                     if common:
-                        gpt_query, links = self.get_gpt_query([common[:1], []], message, [], self.CONFIG[main_web_id],
-                                                              continuity=False)
+                        gpt_query, links = self.get_gpt_query_test(common[:1], message, self.CONFIG[main_web_id])
                         if len(common) > 1:
                             self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id)
                         else:
                             self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                     elif search_result:
-                        gpt_query, links = self.get_gpt_query([search_result[:1], []], message, [], self.CONFIG[main_web_id],
-                                                              continuity=False)
+                        gpt_query, links = self.get_gpt_query_test(search_result[:1], message, self.CONFIG[main_web_id])
                         self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                     elif product_result:
-                        gpt_query, links = self.get_gpt_query([product_result[:1], []], message, [], self.CONFIG[main_web_id],
-                                                              continuity=False)
+                        gpt_query, links = self.get_gpt_query_test(product_result[:1], message, self.CONFIG[main_web_id])
                         if len(product_result) > 1:
                             self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
                         else:
                             self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
                     else:
                         print(f'{hash_},找不到商品')
-                        gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
-                                                              continuity=False)
+                        gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
                         self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
 
                 else:
                     if search_result:
                         if common:
-                            gpt_query, links = self.get_gpt_query([common[:2], []], message, [], self.CONFIG[main_web_id],
-                                                                  continuity=False)
+                            gpt_query, links = self.get_gpt_query_test(common[:2], message, self.CONFIG[main_web_id])
                         else:
-                            gpt_query, links = self.get_gpt_query([search_result, []], message, [], self.CONFIG[main_web_id],
-                                                                  continuity=False)
-
+                            gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
                     else:
-                        gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
-                                                              continuity=False)
+                        gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
                     self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
 
         query_time = time.time() - query_start
         gpt_start = time.time()
         print(f"""{hash_}:gpt輸入：{gpt_query}""")
-        gpt_answer = translation_stw(
-            self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60)).replace('，\n', '，')
+        while True:
+            try:
+                gpt_response = self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60, json_format=True)
+                json_gpt_answer = eval(gpt_response)
+                break
+            except:
+                pass
+        print(json_gpt_answer)
+        print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
+        gpt_answer = translation_stw(json_gpt_answer.get('answer')).replace('，\n', '，')
 
         gpt_time = time.time() - gpt_start
-        print(f"""{hash_}:gpt回答：{gpt_answer}""")
-
         answer = adjust_ans_format(gpt_answer)
-        answer, unused_links = self.adjust_ans_url_format(answer, links, self.CONFIG[main_web_id])
+        answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id])
         if main_web_id in {'AviviD', 'avividai'}:
             if user_id not in self.avivid_user:
                 self.avivid_user.add(user_id)
                 answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
             print(f'{hash_}:輸入語言種類：{lang}')
             answer = self.translate(lang, answer).split("'translation':")[-1]
-        else:
-            answer = self.answer_append(answer, unused_links)
         print(f"""{hash_}:整理後回答：{answer}""")
         update_history_df(web_id, user_id, message, answer, keyword, keyword_list, keyword_time+search_time+query_time+gpt_time, now_timestamps)
         print(f"{hash_}花費時間k={keyword_time}, s={search_time}, q={query_time}, g={gpt_time}")
