@@ -352,7 +352,6 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                 "answer":Your answer",
                                 "Reference_links_used":["url","..."]
                                 {'}'}
-                                #If there is no reference link, "Reference_links_used" can be [] 
                                 """
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
