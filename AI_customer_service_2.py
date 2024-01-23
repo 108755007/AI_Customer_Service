@@ -365,10 +365,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
         print(url_set)
         for url in url_set:
-            reurl = url
-            for char in '?':
-                reurl = reurl.replace(char, '\\' + char)
-            answer = re.sub(reurl + '(?![\w\.\-\?/=+&#$%^;%_\|])', f'[{self.url_format(url)}]', answer)
+            answer = answer.replace(url, f"[{self.url_format(url)}]")
         if not links and not url_set:
             answer += f"[{self.url_format(config['web_url'])}]\n"
         for i in links:
