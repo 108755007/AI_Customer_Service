@@ -324,7 +324,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                 4. Refrain from generating information about inventory issues and pricing.
                                 5. Direct customers to the official website for inventory or stock-related inquiries.
                                 6. Conclude each response with the closing "祝您愉快！".
-                                7. Do not include any URL in the reply
+                                7. Please avoid including any reference links in the 'answer' field of the JSON. Instead, place the link in the 'Reference_links_used' field of the JSON
 
                                 Given Information:"""
             for i, v in enumerate(result):
