@@ -332,6 +332,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     continue
                 url = v.get('link')
                 url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
+                url = url if url.endswith('/') else url+'/'
                 if url in links:
                     continue
                 if v.get('title'):
