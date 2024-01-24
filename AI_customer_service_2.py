@@ -426,8 +426,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 Target Language: {lang}"""
             out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
                                 {'role': 'user', 'content': m}], json_format=True, timeout=120)
-        print()
-        return eval(out).get('target_text')
+            return eval(out).get('target_text')
+        return out
 
     def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='中文', main_web_id=''):
         main_web_id = web_id if not main_web_id else main_web_id
