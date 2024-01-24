@@ -331,6 +331,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         else:
             recommend = f"""謝謝您對我們的關注!如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
                 [ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
+            print(lang)
             recommend = self.translate(lang, recommend)
         DBhelper.ExecuteUpdatebyChunk(
             pd.DataFrame(
@@ -425,6 +426,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 Target Language: {lang}"""
             out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
                                 {'role': 'user', 'content': m}], json_format=True, timeout=120)
+        print()
         return eval(out).get('target_text')
 
     def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='中文', main_web_id=''):
@@ -433,6 +435,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         hash_ = user_id
         now_timestamps = int(datetime.datetime.timestamp(datetime.datetime.now()))
         print(f"{hash_},輸入訊息：{message}")
+        print(f"{hash_},輸入的語言：{lang}")
         keyword_list, keyword_time = self.get_keyword(message, main_web_id, lang)
         if isinstance(keyword_list, str):
             print(f'{hash_},獲取關鍵字錯誤')
