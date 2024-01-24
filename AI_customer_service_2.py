@@ -326,10 +326,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 output = {k: v for k, v in hot_product.items() if v in range(1, 11)}
                 product_result = self.Recommend.fetch_data(product_ids=output, web_id=main_web_id)
                 product = random.choice(product_result)
-            recommend = f"""謝謝您對我們的關注！如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品：
+            recommend = f"""謝謝您對我們的關注!如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品：
                 - 【{product.get('title')} [ {self.url_format(product.get('link'))} ]"""
         else:
-            recommend = f"""謝謝您對我們的關注！如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
+            recommend = f"""謝謝您對我們的關注!如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
                 [ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
             recommend = self.translate(lang, recommend)
         DBhelper.ExecuteUpdatebyChunk(
