@@ -354,32 +354,35 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                 7. Please avoid including any reference links in the 'answer' field of the JSON. Instead, place the link in the 'Reference_links_used' field of the JSON
 
                                 Given Information:"""
-            for i, v in enumerate(result):
-                if not v.get('link'):
-                    continue
-                url = v.get('link')
-                url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
-                url = url if url.endswith('/') else url+'/'
-                if url in links:
-                    continue
-                if v.get('title'):
-                    chatgpt_query += f"""\n\n[{len(links) + 1}] Title: {v.get('title')}\n"""
-                if v.get('snippet'):
-                    chatgpt_query += f"""   Snippet:"{v.get('snippet')}\n"""
-                if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get(
-                        'og:description'):
-                    chatgpt_query += f"""   description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-                chatgpt_query += f"""URL: {url}\n"""
-                links.append((i, url, v.get('title')))
-            chatgpt_query += f"""Customer Question:{message}
-                                Use the given information to answer the customer’s question, following the response guidelines.
-
-                                json format of reply:
-                                {'{'}
-                                "answer":Your answer",
-                                "Reference_links_used":["url","..."]
-                                {'}'}
-                                """
+            if result:
+                for i, v in enumerate(result):
+                    if not v.get('link'):
+                        continue
+                    url = v.get('link')
+                    url = re.search(r'.+detail/[\w\-]+/', url).group(0) if re.search(r'.+detail/[\w\-]+/', url) else url
+                    url = url if url.endswith('/') else url+'/'
+                    if url in links:
+                        continue
+                    if v.get('title'):
+                        chatgpt_query += f"""\n\n[{len(links) + 1}] Title: {v.get('title')}\n"""
+                    if v.get('snippet'):
+                        chatgpt_query += f"""   Snippet:"{v.get('snippet')}\n"""
+                    if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get(
+                            'og:description'):
+                        chatgpt_query += f"""   description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
+                    chatgpt_query += f"""URL: {url}\n"""
+                    links.append((i, url, v.get('title')))
+                chatgpt_query += f"""Customer Question:{message}
+                                    Use the given information to answer the customer’s question, following the response guidelines.
+    
+                                    json format of reply:
+                                    {'{'}
+                                    "answer":Your answer",
+                                    "Reference_links_used":["url","..."]
+                                    {'}'}
+                                    """
+            else:
+                chatgpt_query += f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}\n"
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         # chatgpt_query = chatgpt_query if not continuity else self.get_continue_query(message,history)
