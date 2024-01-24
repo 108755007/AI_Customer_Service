@@ -229,7 +229,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         return
 
     @cost_time
-    def get_keyword(self, message: str, web_id: str,lang: str) -> list:
+    def get_keyword(self, message: str, web_id: str, lang: str) -> list:
         forbidden_words = {'client_msg_id', '我', '你', '妳', '們', '沒', '怎', '麼', '要', '沒有', '嗎', '^在$',
                            '^做$', '^如何$', '^有$', '^可以$', '^商品$', '^哪', '哪$',
                            '暢銷', '熱賣', '熱銷', '特別', '最近', '幾天', '常常', '爆款', '推薦', '吃', '賣', '嘛',
@@ -245,7 +245,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         # segmentation
         # print(message)
         k = 0
-        if web_id in {'AviviD', 'avividai'} and lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語']:
+        if web_id in {'AviviD', 'avividai'} and lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語', '']:
             print("###關鍵字需要變成英文###")
             while True:
                 if k > 10:
@@ -416,10 +416,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
     def check_lang(self, message):
         lang = self.ask_gpt([{'role': 'system', 'content': self.check_lang_prompt},
                                      {'role': 'user', 'content': message}], json_format=True)
-        return lang.get("input_language_type")
+        return eval(lang).get("input_language_type")
 
     def translate(self, lang, out):
-        if lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語']:
+        if lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語', '']:
             m = f"""Source Text: "{out}"
                 Source Language: 繁體中文
                 Target Language: {lang}"""
