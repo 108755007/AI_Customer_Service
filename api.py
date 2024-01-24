@@ -128,7 +128,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     if custom_judge == 'product_inquiry':
         reply += '正在為您查詢商品,稍等一下呦！'
         if tr:
-            reply = AI_judge.translate(lang, reply).split("'translation':")[-1].replace('}', '')
+            reply = AI_judge.translate(lang, reply)
         types = 1
     elif custom_judge == 'return_or_exchange_request':
         reply += '將為您提供退換貨說明,請稍待～'

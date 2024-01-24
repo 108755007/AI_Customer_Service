@@ -104,17 +104,40 @@ class LangchainSetting:
                                       "3": "screen is unresponsive"
                                     }
                                     ```"""
-        self.translation_prompt="""You are an AI assistant designed to translate non-English input text into English and return the response in JSON format. Upon receiving text, please identify the language, translate it into English, and output the translation in a structured JSON object that includes the  the English translation.
-                                
-                                    Example input:
-                                    "Hola, ¿cómo estás?"
+        self.translation_prompt="""You are a helpful assistant designed to output JSON. Translate the provided text into the specified target language and format the translation as a JSON object, including fields for the target text, and target language.  
+                                    Example:
                                     
-                                    Expected JSON output:
+                                    Input:
+                                    Source Text: "Hello, how are you?"
+                                    Source Language: English
+                                    Target Language: Spanish
+                                    
+                                    Output:
                                     {
-                                      "translation": "Hello, how are you?"
+                                      "target_text": "Hola, ¿cómo estás?",
+                                      "target_language": "Spanish"
                                     }
                                     """
 
+        self.check_lang_prompt="""You are a language analysis AI that outputs JSON-formatted responses. Given an input phrase, identify the language it is written in and determine the language family or type it belongs to. You must output only the type or family of the language in the following JSON format:
+                                    {"input_language_type": "type/family_of_language"}
+                                    
+                                    Please adhere to the following requirements:
+                                    1. Provide the type or family of the language based on the input phrase.
+                                    2. Your response must be in valid JSON format.
+                                    3. Do not respond with "unknown" under any circumstances. If the input is ambiguous or unclear, give your best estimate based on the available data.
+                                    
+                                    Here is an input phrase for analysis:
+                                    "請分析輸入的語言並確定其所屬的語言系統或種類。"
+                                    
+                                    Please provide the JSON formatted language type or family.
+                                    ```
+                                    
+                                    When GPT-4 processes this prompt, it will understand that it needs to evaluate the input phrase’s language and respond with the language's type or family, encoded in a JSON response as specified. Here is an example response you might expect from GPT-4 with the given input:
+                                    
+                                    ```json
+                                    {"input_language_type": "繁體中文"}
+                                    ```"""
     def ai_des_setting(self):
         pass
         return
@@ -228,12 +251,15 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 if k > 10:
                     break
                 try:
+                    m = f"""Source Text: "{message}"
+                        Source Language: {lang}
+                        Target Language: English"""
                     reply = self.ask_gpt(message=[{'role': 'system', 'content': self.translation_prompt},
-                                                  {'role': 'user', 'content': f'{message}'}], json_format=True)
+                                                  {'role': 'user', 'content': m}], json_format=True)
                     if reply == 'timeout':
                         k += 1
                         continue
-                    message = eval(reply).get('translation')
+                    message = eval(reply).get('target_text')
                     print(f"###f'翻譯後的文本{message}'###")
                     break
                 except:
@@ -388,17 +414,18 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         return answer
 
     def check_lang(self, message):
-        lang = self.ask_gpt([{'role': 'system',
-                              'content': """請分析輸入的語言並確定其所屬的語言系統或種類。你只能提供語言的種類,切記一定要回答種類,禁止回答未知,回答格式,輸入語言:種類"""},
-                             {'role': 'user', 'content': f"<\'input\':'{message}'>"}], model='gpt-4')
-        return lang.split(':')[-1]
+        lang = self.ask_gpt([{'role': 'system', 'content': self.check_lang_prompt},
+                                     {'role': 'user', 'content': message}], json_format=True)
+        return lang.get("input_language_type")
 
     def translate(self, lang, out):
         if lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語']:
-            out = self.ask_gpt([{'role': 'system',
-                                 'content': f"""Please translate this given input into {lang}. All I need returned is the translated text,Answer format <\'output\':translated text """},
-                                {'role': 'user', 'content': f"<\'input\':'{out}'>"}], model='gpt-3.5-turbo-16k"', timeout=120)
-        return out.split("<output:")[-1].split("<\'output\':'")[-1].split("<\'output\':")[-1].split("<'output':'")[-1].split("<'output':")[-1].replace('}', '').replace("'>", "").replace("'", "")
+            m = f"""Source Text: "{out}"
+                Source Language: 繁體中文
+                Target Language: {lang}"""
+            out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
+                                {'role': 'user', 'content': m}], json_format=True, timeout=120)
+        return eval(out).get('target_text')
 
     def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='中文', main_web_id=''):
         main_web_id = web_id if not main_web_id else main_web_id
@@ -406,7 +433,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         hash_ = user_id
         now_timestamps = int(datetime.datetime.timestamp(datetime.datetime.now()))
         print(f"{hash_},輸入訊息：{message}")
-        keyword_list, keyword_time = self.get_keyword(message, main_web_id,lang)
+        keyword_list, keyword_time = self.get_keyword(message, main_web_id, lang)
         if isinstance(keyword_list, str):
             print(f'{hash_},獲取關鍵字錯誤')
             update_error(web_id, user_id, message, 'keyword', now_timestamps)
@@ -435,8 +462,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 gpt_query, links = self.get_gpt_query_test(search_result, message, self.CONFIG[main_web_id])
                 self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
             else:
-                gpt_query, links = self.get_gpt_query([message, ''], message, [], self.CONFIG[main_web_id],
-                                                      continuity=False)
+                gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
                 self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
 
         else:
@@ -457,7 +483,6 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             else:
                 print(f"{hash_},google無商品")
 
-                
             if len(result) == 0 and self.CONFIG[main_web_id]['mode'] == 2:
                 gpt_query = [{'role': 'user', 'content': message}]
                 gpt_answer = answer = f"親愛的顧客您好，目前無法回覆此問題，稍後將由專人為您服務。"
@@ -518,7 +543,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 self.avivid_user.add(user_id)
                 answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
             print(f'{hash_}:輸入語言種類：{lang}')
-            answer = self.translate(lang, answer).split("'translation':")[-1]
+            answer = self.translate(lang, answer)
         print(f"""{hash_}:整理後回答：{answer}""")
         update_history_df(web_id, user_id, message, answer, keyword, keyword_list, keyword_time+search_time+query_time+gpt_time, now_timestamps)
         print(f"{hash_}花費時間k={keyword_time}, s={search_time}, q={query_time}, g={gpt_time}")
