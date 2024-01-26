@@ -417,9 +417,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         for i in links:
             if i not in url_set:
                 if i.split('.')[-1] in ['html/']:
-                    answer = answer.replace(i, f"[{self.url_format(i[:-1])}]")
+                    answer += f"[{self.url_format(i[:-1])}]\n"
                 else:
-                    answer = answer.replace(i, f"[{self.url_format(i)}]")
+                    answer += f"[{self.url_format(i)}]\n"
         if not links and not url_set:
             answer += f"[{self.url_format(config['web_url'])}]\n"
         return answer
