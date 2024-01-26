@@ -264,26 +264,31 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     break
                 except:
                     k += 1
-        k = 0
-        while True:
-            if k > 10:
-                print('關鍵字獲取錯誤,使用切割')
-                keyword_list = analyse.extract_tags(message, topK=2)
-                break
-            try:
-                reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt},
-                                              {'role': 'user', 'content': f'{message}'}], json_format=True)
-                if reply == 'timeout':
+        else:
+            last_reply = ''
+            while True:
+                repeat = False
+                if k > 10:
+                    print('關鍵字獲取錯誤,使用切割')
+                    keyword_list = analyse.extract_tags(message, topK=2)
+                    break
+                try:
+                    reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt},
+                                                  {'role': 'user', 'content': f'{message}'}], json_format=True)
+                    if reply == 'timeout':
+                        k += 1
+                        continue
+                    if reply == last_reply:
+                        repeat = True
+                        print('重複擷取')
+                    last_reply = reply
+                    keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
+                    if len(keyword_list) == 0 and not repeat:
+                        raise
+                    print(f"gpt成功獲取關鍵字{keyword_list}")
+                    break
+                except:
                     k += 1
-                    continue
-                keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
-                if len(keyword_list) == 0:
-                    print('gpt攝取錯誤,重新尋找')
-                    raise
-                print(f"gpt成功獲取關鍵字{keyword_list}")
-                break
-            except:
-                k += 1
 
         return keyword_list
 
@@ -348,7 +353,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                 5. Direct customers to the official website for inventory or stock-related inquiries.
                                 6. Conclude each response with the closing "祝您愉快！".
                                 7. Please avoid including any reference links in the 'answer' field of the JSON. Instead, place the link in the 'Reference_links_used' field of the JSON
-
+                                8. When using a URL, make sure it ends with "/".
                                 Given Information:"""
             if result:
                 for i, v in enumerate(result):
@@ -378,7 +383,17 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                     {'}'}
                                     """
             else:
-                chatgpt_query += f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}\n"
+                chatgpt_query += f"""我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}\n
+                                    
+                                    Customer Question:{message}
+                                    Use the given information to answer the customer’s question, following the response guidelines.
+    
+                                    json format of reply:
+                                    {'{'}
+                                    "answer":Your answer",
+                                    "Reference_links_used":["url","..."]
+                                    {'}'}
+                                    """
         else:
             chatgpt_query = f"""Act as customer service representative for "{web_id_conf['web_name']}"({web_id_conf['web_id']}). Provide a detailed response addressing their concern, but there is no information about the customer's question in the database.  Reply in 繁體中文 and Following the rule below:\n"親愛的顧客您好，" in the beginning.\n"祝您愉快！" in the end.\n\nQuery: {message}"""
         # chatgpt_query = chatgpt_query if not continuity else self.get_continue_query(message,history)
@@ -386,15 +401,27 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         #####################################################################################
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
         return gpt_query, links
+
     def adjust_ans_url_format(self, answer: str, links: list, config: dict) -> str:
+        if not isinstance(links, list):
+            if links == '':
+                links = []
+            else:
+                links = [links]
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
         for url in url_set:
-            answer = answer.replace(url, f"[{self.url_format(url)}]")
-        if not links and not url_set:
-            answer += f"[{self.url_format(config['web_url'])}]\n"
+            if url.split('.')[-1] in ['html/']:
+                answer = answer.replace(url, f"[{self.url_format(url[:-1])}]")
+            else:
+                answer = answer.replace(url, f"[{self.url_format(url)}]")
         for i in links:
             if i not in url_set:
-                answer += f"[{self.url_format(i)}]\n"
+                if i.split('.')[-1] in ['html/']:
+                    answer = answer.replace(i, f"[{self.url_format(url[:-1])}]")
+                else:
+                    answer = answer.replace(i, f"[{self.url_format(url)}]")
+        if not links and not url_set:
+            answer += f"[{self.url_format(config['web_url'])}]\n"
         return answer
 
     def answer_append(self, answer: str, unused_links: list) -> str:
@@ -526,9 +553,11 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             try:
                 gpt_response = self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60, json_format=True)
                 json_gpt_answer = eval(gpt_response)
+                if not json_gpt_answer.get('answer'):
+                    raise
                 break
             except:
-                pass
+                print(f"gpt回答失敗{gpt_response}")
         print(json_gpt_answer)
         print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
         gpt_answer = translation_stw(json_gpt_answer.get('answer')).replace('，\n', '，')
