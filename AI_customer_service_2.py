@@ -267,7 +267,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         k = 0
         while True:
             if k > 10:
-                print('關鍵字獲取錯誤')
+                print('關鍵字獲取錯誤,使用切割')
                 keyword_list = analyse.extract_tags(message, topK=2)
                 break
             try:
@@ -278,11 +278,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     continue
                 keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
                 if len(keyword_list) == 0:
-                    keyword_list = [k for _, k in eval(reply).items() if not any(re.search(w, k) for w in forbidden_words)]
-                    print('此商品使用gpt修正關鍵字')
-                print(f"gpt成功獲取關鍵字")
-                if len(keyword_list) == 0:
-                    print('但此商品無關鍵字！！')
+                    print('gpt攝取錯誤,重新尋找')
+                    raise
+                print(f"gpt成功獲取關鍵字{keyword_list}")
                 break
             except:
                 k += 1
