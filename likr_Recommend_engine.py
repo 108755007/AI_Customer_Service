@@ -136,7 +136,7 @@ class Recommend_engine:
 
     def pick_duplicate(self, likr: list[dict], google: list[dict], web_id: str):
         urlencode = UrlEncode(web_id=web_id)
-        likr_id = {urlencode.signature_translate(item.get('url'), web_id=web_id):i for i, item in enumerate(likr)}
+        likr_id = {urlencode.signature_translate(item.get('link'), web_id=web_id):i for i, item in enumerate(likr)}
         google_id = {urlencode.signature_translate(item.get('link'), web_id=web_id): i for i, item in enumerate(google)}
         print(likr_id)
         print(google_id)
