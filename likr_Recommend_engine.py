@@ -81,10 +81,11 @@ class Recommend_engine:
         return {word: data}
 
     def search(self, keywords: list, web_id: str, flags: bool) -> dict:
+        result = {}
         if flags:
             result = [self.normal_search(word=k, web_id=web_id) for k in keywords]
             result = list(itertools.chain(*result))
-        else:
+        if not result or not flags:
             result = self.fetch_hot_rank(web_id=web_id)
         return result
 
