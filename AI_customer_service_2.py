@@ -323,9 +323,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         if main_web_id not in {'AviviD', 'avividai'}:
             if status == 1 and not product:
                 hot_product = self.Recommend.fetch_hot_rank(web_id=main_web_id)
-                output = {k: v for k, v in hot_product.items() if v in range(1, 11)}
-                product_result = self.Recommend.fetch_data(product_ids=output, web_id=main_web_id)
-                product = random.choice(product_result)
+                product = random.choice(hot_product)
             recommend = f"""謝謝您對我們的關注!如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品：
                 - 【{product.get('title')} [ {self.url_format(product.get('link'))} ]"""
         else:
@@ -392,7 +390,6 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         return gpt_query, links
     def adjust_ans_url_format(self, answer: str, links: list, config: dict) -> str:
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
-        print(url_set)
         for url in url_set:
             answer = answer.replace(url, f"[{self.url_format(url)}]")
         if not links and not url_set:
@@ -472,10 +469,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id)
 
         else:
-            product_result, search_result, common, flags = self.Recommend.likr_recommend(search_result=result[0],
-                                                                                         keywords=keyword_list,
-                                                                                         flags={},
-                                                                                         config=self.CONFIG[main_web_id])
+            product_result, search_result, common = self.Recommend.likr_recommend(search_result=result[0],
+                                                                                  keywords=keyword_list,
+                                                                                  flags=find_dpa,
+                                                                                  config=self.CONFIG[main_web_id])
             if common:
                 print(f"{hash_},有推薦類品")
             else:
@@ -519,10 +516,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
 
                 else:
                     if search_result:
-                        if common:
-                            gpt_query, links = self.get_gpt_query_test(common[:2], message, self.CONFIG[main_web_id])
-                        else:
-                            gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
+                        gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
                     else:
                         gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
                     self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id)
