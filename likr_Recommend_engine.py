@@ -65,7 +65,7 @@ class Recommend_engine:
                 "pagemap": {"metatags": [{"og:description": row[2]}]},
                 "link": row[3],
                 # "link":sub_domain + f'/avivid/product/detail/{row["product_id"]}' if sub_domain else row['url'],
-                'product_id': web_id+'_'+row[0],
+                'product_id': row[0],
                 "rank": i+1
             }
             output.append(payload)
