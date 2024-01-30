@@ -367,11 +367,11 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     if v.get('title'):
                         chatgpt_query += f"""\n\n                           [{len(links) + 1}] Title: {v.get('title')}\n"""
                     if v.get('snippet'):
-                        chatgpt_query += f"""                               Snippet:"{v.get('snippet')}\n"""
+                        chatgpt_query += f"""                               Snippet:"{v.get('snippet')}"\n """
                     if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get(
                             'og:description'):
-                        chatgpt_query += f"""                               description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
-                    chatgpt_query += f"""URL: {url}\n"""
+                        chatgpt_query += f"""                              description: "{v.get('pagemap').get('metatags')[0].get('og:description')}" \n"""
+                    chatgpt_query += f"""                               URL: {url}\n"""
                     links.append((i, url, v.get('title')))
                 chatgpt_query += f"""                   
                             Use the given information to answer the customer’s question, following the response guidelines.
