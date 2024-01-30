@@ -344,17 +344,17 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                       "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']},如果是有關於存貨,庫存的問題,請客人到官網進行確認"}]
         links = []
         if type(result) != str:
-            chatgpt_query = f"""You are the GPT-4 AI, programmed to serve as a customer service assistant for "禾多移動". Your responses should be in Traditional Chinese and adhere to the following guidelines:
+            chatgpt_query = f"""You are the GPT-4 AI, programmed to serve as a customer service assistant for "{web_id_conf['web_name']}". Your responses should be in Traditional Chinese and adhere to the following guidelines:
 
-                                1. Start each response with the greeting "親愛的顧客您好，".
-                                2. Provide answers based solely on the information given about AviviD's smart customer service system.
-                                3. Focus on the presented customer concern or question, without straying into unrelated topics.
-                                4. Refrain from generating information about inventory issues and pricing.
-                                5. Direct customers to the official website for inventory or stock-related inquiries.
-                                6. Conclude each response with the closing "祝您愉快！".
-                                7. Please avoid including any reference links in the 'answer' field of the JSON. Instead, place the link in the 'Reference_links_used' field of the JSON
-                                8. When using a URL, make sure it ends with "/".
-                                Given Information:"""
+                            1. Start each response with the greeting "親愛的顧客您好，".
+                            2. Provide answers based solely on the information given about AviviD's smart customer service system.
+                            3. Focus on the presented customer concern or question, without straying into unrelated topics.
+                            4. Refrain from generating information about inventory issues and pricing.
+                            5. Direct customers to the official website for inventory or stock-related inquiries.
+                            6. Conclude each response with the closing "祝您愉快！".
+                            7. Please avoid including any reference links in the 'answer' field of the JSON. Instead, place the link in the 'Reference_links_used' field of the JSON
+                            8. When using a URL, make sure it ends with "/".
+                            Given Information:"""
             if result:
                 for i, v in enumerate(result):
                     if not v.get('link'):
@@ -365,23 +365,24 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     if url in links:
                         continue
                     if v.get('title'):
-                        chatgpt_query += f"""\n\n[{len(links) + 1}] Title: {v.get('title')}\n"""
+                        chatgpt_query += f"""\n\n                           [{len(links) + 1}] Title: {v.get('title')}\n"""
                     if v.get('snippet'):
-                        chatgpt_query += f"""   Snippet:"{v.get('snippet')}\n"""
+                        chatgpt_query += f"""                               Snippet:"{v.get('snippet')}\n"""
                     if v.get('pagemap') and v.get('pagemap').get('metatags') and v.get('pagemap').get('metatags')[0].get(
                             'og:description'):
-                        chatgpt_query += f"""   description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
+                        chatgpt_query += f"""                               description: {v.get('pagemap').get('metatags')[0].get('og:description')}" """
                     chatgpt_query += f"""URL: {url}\n"""
                     links.append((i, url, v.get('title')))
-                chatgpt_query += f"""Customer Question:{message}
-                                    Use the given information to answer the customer’s question, following the response guidelines.
-    
-                                    json format of reply:
-                                    {'{'}
-                                    "answer":Your answer",
-                                    "Reference_links_used":["url","..."]
-                                    {'}'}
-                                    """
+                chatgpt_query += f"""                   
+                            Use the given information to answer the customer’s question, following the response guidelines.
+
+                            json format of reply:
+                            {'{'}
+                            "answer":Your answer",
+                            "Reference_links_used":["url","..."]
+                            {'}'}
+                            Customer Question:{message}
+                            """
             else:
                 chatgpt_query += f"""我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']}\n
                                     
@@ -548,7 +549,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
 
         query_time = time.time() - query_start
         gpt_start = time.time()
-        print(f"""{hash_}:gpt輸入：{gpt_query}""")
+        print(f"""{hash_}:gpt輸入system：{gpt_query[0]['content']}""")
+        print(f"""{hash_}:gpt輸入user：{gpt_query[1]['content']}""")
         while True:
             try:
                 # if web_id in {'AviviD', 'avividai'}:
