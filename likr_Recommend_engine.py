@@ -151,7 +151,6 @@ class Recommend_engine:
 
     def likr_recommend(self, search_result: list[dict], keywords: list, flags: bool, config: dict):
         product_result, recommend = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
-        print(search_result)
         common = []
         if flags and keywords and not recommend:
             product_result, search_result, common = self.pick_duplicate(likr=product_result, google=search_result, web_id=config['web_id'])

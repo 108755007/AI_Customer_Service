@@ -551,6 +551,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         print(f"""{hash_}:gpt輸入：{gpt_query}""")
         while True:
             try:
+                # if web_id in {'AviviD', 'avividai'}:
+                #     gpt_response = self.ask_gpt(gpt_query, model='avividai', timeout=60, json_format=True,azure=False)
+                # else:
                 gpt_response = self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60, json_format=True)
                 json_gpt_answer = eval(gpt_response)
                 if not json_gpt_answer.get('answer'):

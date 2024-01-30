@@ -60,6 +60,8 @@ class ChatGPT_AVD:
                     model_name = "text-embedding-ada-002"
                 elif model == 'gpt-4-pre':
                     model_name = "gpt-4-1106-preview"
+                elif model == 'avividai':
+                    model_name = "ft:gpt-3.5-turbo-1106:avividai:avivid-20240116:8hhDK4p7"
                 else:
                     model_name = "gpt-3.5-turbo-1106"
                 if debug:
