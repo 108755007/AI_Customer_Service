@@ -82,12 +82,15 @@ class Recommend_engine:
 
     def search(self, keywords: list, web_id: str, flags: bool) -> dict:
         result = {}
+        recommend = False
         if flags:
             result = [self.normal_search(word=k, web_id=web_id) for k in keywords]
             result = list(itertools.chain(*result))
         if not result or not flags:
+            print('找不到指定商品')
+            recommend = True
             result = self.fetch_hot_rank(web_id=web_id)
-        return result
+        return result, recommend
 
     def search_bar(self, keyword: str, web_id: str):
         normal_result = self.normal_search(word=keyword, web_id=web_id).get(keyword, [])
@@ -147,9 +150,10 @@ class Recommend_engine:
         return likr, google, common
 
     def likr_recommend(self, search_result: list[dict], keywords: list, flags: bool, config: dict):
-        product_result = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
+        product_result, recommend = self.search(keywords=keywords, web_id=config['web_id'], flags=flags)
+        print(search_result)
         common = []
-        if flags and keywords:
+        if flags and keywords and not recommend:
             product_result, search_result, common = self.pick_duplicate(likr=product_result, google=search_result, web_id=config['web_id'])
         product_result = product_result[:20]
         random.shuffle(product_result)

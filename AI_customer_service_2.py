@@ -519,16 +519,16 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             else:
                 recommend_product = product_result[-1] if len(product_result) > 0 else {}
                 if find_dpa:
-                    if common:
+                    if common:  # 推薦成功機率高
                         gpt_query, links = self.get_gpt_query_test(common[:1], message, self.CONFIG[main_web_id])
                         if len(common) > 1:
                             self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id)
                         else:
                             self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
-                    elif search_result:
-                        gpt_query, links = self.get_gpt_query_test(search_result[:1], message, self.CONFIG[main_web_id])
+                    elif search_result:  # google可能亂給
+                        gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
                         self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
-                    elif product_result:
+                    elif product_result:  # 通常是推薦商品
                         gpt_query, links = self.get_gpt_query_test(product_result[:1], message, self.CONFIG[main_web_id])
                         if len(product_result) > 1:
                             self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id)
