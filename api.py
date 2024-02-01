@@ -80,16 +80,16 @@ a_dict, q_emb_tensor = get_tag_embedding()
 
 
 @app.get("/AI_service", tags=["AI_service"])
-def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文', main_web_id: str = ''):
+def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文', main_web_id: str = '', types: int = 1):
     if web_id == '' or message == '' or group_id == '':
         return {"message": "no sentence input or no web_id", "message": ""}
-    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id)
+    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id, types=types)
 
 
 @app.get("/update_product", tags=["get_product"])
-def ai_update_product(web_id: str = '', group_id: str = '', main_web_id: str = ''):
+def ai_update_product(web_id: str = '', group_id: str = '', main_web_id: str = '', types: int = 1):
     main_web_id = web_id if main_web_id == '' else main_web_id
-    AI_judge.update_recommend_status(web_id, group_id, 1, main_web_id=main_web_id)
+    AI_judge.update_recommend_status(web_id, group_id, 1, main_web_id=main_web_id, types=types)
     return 'ok'
 
 
