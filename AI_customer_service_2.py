@@ -336,9 +336,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             recommend = self.translate(lang, recommend)
         DBhelper.ExecuteUpdatebyChunk(
             pd.DataFrame(
-                [[web_id, group_id, status, recommend, int(datetime.datetime.timestamp(datetime.datetime.now()))]],
-                columns=['web_id', 'group_id', 'status', 'recommend', 'timestamp']), db='jupiter_new',
+                [[web_id,main_web_id ,group_id, status, recommend, int(datetime.datetime.timestamp(datetime.datetime.now()))]],
+                columns=['web_id','main_web_id','group_id', 'status', 'recommend', 'timestamp']), db='jupiter_new',
             table=f'AI_service_recommend_status', is_ssh=False)
+
     def get_gpt_query_test(self, result: list, message: str, web_id_conf: dict):
         gpt_query = [{"role": "system",
                       "content": f"我們是{web_id_conf['web_name']}(代號：{web_id_conf['web_id']},官方網站：{web_id_conf['web_url']}),{web_id_conf['description']},如果是有關於存貨,庫存的問題,請客人到官網進行確認"}]
