@@ -326,7 +326,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         if main_web_id not in {'AviviD', 'avividai'}:
             if status == 1 and not product:
                 hot_product = self.Recommend.fetch_hot_rank(web_id=main_web_id)
-                product = random.choice(hot_product)
+                if hot_product:
+                    product = random.choice(hot_product)
+                else:
+                    product = {'title': '我們的官方網站', 'link': self.CONFIG[main_web_id]['web_url']}
             recommend = f"""謝謝您對我們的關注!如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品：
                 - 【{product.get('title')} [ {self.url_format(product.get('link'))} ]"""
         else:
