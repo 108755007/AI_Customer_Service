@@ -381,12 +381,13 @@ class AiTraffic(Util):
                                           db='sunscribe', table='ai_article', chunk_size=100000, is_ssh=False)
             return list(title.values())
 
-    def get_sub_title(self, title: str = '', user_id: str = '', web_id: str = 'test', types: int = 1):
+    def get_sub_title(self, title: str = '', user_id: str = '', web_id: str = 'test', types: int = 1, eng: bool = False):
         print(f"""獲取副標題,標題為:{title}""")
         k = 0
+        sub_title_prompt = self.sub_title_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.sub_title_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
         while True:
             try:
-                result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': self.sub_title_prompt},
+                result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sub_title_prompt},
                                                        {'role': 'user', 'content': f'{title}'}], json_format=True)
                 sub_title_dict = eval(result)
                 break

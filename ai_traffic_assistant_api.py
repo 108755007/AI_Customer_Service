@@ -48,8 +48,8 @@ def title(web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_ma
     return {i+1: v for i, v in enumerate(res_list)}
 
 @app.get("/sub-heading", tags=["generate_sub_title"])
-def subtitle(web_id: str = 'test', user_id: str = '', title: str = '', types: int = 1):
-    return AI_traffic.get_sub_title(title, user_id, web_id, types)
+def subtitle(web_id: str = 'test', user_id: str = '', title: str = '', types: int = 1, eng: bool = False):
+    return AI_traffic.get_sub_title(title, user_id, web_id, types, eng)
 
 
 @app.get("/articles", tags=["generate_articles"])
