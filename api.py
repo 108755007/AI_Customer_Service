@@ -113,6 +113,8 @@ def ai_description(title: str = ''):
 
 @app.get("/judge", tags=["judge"])
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
+    if message.isdigit():
+        return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！Dear customer, Please provide further details regarding the issue once again. Thank you!」", None
     start = time.time()
     main_web_id = web_id if main_web_id == '' else main_web_id
     status = check_status(web_id, group_id)
