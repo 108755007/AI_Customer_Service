@@ -120,11 +120,15 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     tr = False
     lang = '繁體中文'
     reply = "" if status else "您好，我是客服機器人小禾！"
-    if main_web_id in['avividai', 'AviviD']:
+    if main_web_id in ['avividai', 'AviviD']:
+        tr = True
         lang = AI_judge.check_lang(message)
         print(f'{group_id}:分析出的語言是：{lang}')
-        if lang not in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文']:
-            tr = True
+        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文']:
+            if i in lang:
+                tr = False
+                lang = '繁體中文'
+                break
     custom_judge = AI_judge.get_judge_test(message)
     if custom_judge == 'product_inquiry':
         reply += '正在為您查詢商品,稍等一下呦！'
