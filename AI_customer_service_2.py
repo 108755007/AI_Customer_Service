@@ -592,7 +592,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         print(f"""{hash_}:整理後回答：{answer}""")
         update_history_df(web_id, user_id, message, answer, keyword, keyword_list, keyword_time+search_time+query_time+gpt_time, now_timestamps)
         print(f"{hash_}花費時間k={keyword_time}, s={search_time}, q={query_time}, g={gpt_time}")
-        return translation_stw(answer)
+        return translation_stw(answer).replace('智慧客服', '智能客服')
 
         # # history/continue
         # # to be add......print(flags)
