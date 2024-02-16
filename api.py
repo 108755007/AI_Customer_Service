@@ -9,6 +9,7 @@ import torch
 import collections
 from db import DBhelper
 import torch.nn.functional as F
+from AI_customer_service_2 import translation_stw
 
 sys.path.append("..")
 load_dotenv()
@@ -126,11 +127,14 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         tr = True
         lang = AI_judge.check_lang(message)
         print(f'{group_id}:分析出的語言是：{lang}')
-        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文']:
+        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語']:
             if i in lang:
                 tr = False
                 lang = '繁體中文'
                 break
+        if translation_stw(message) != message:
+            tr = False
+            lang = '繁體中文'
     custom_judge = AI_judge.get_judge_test(message)
     if custom_judge == 'product_inquiry':
         reply += '正在為您查詢商品,稍等一下呦！'

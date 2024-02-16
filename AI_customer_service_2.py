@@ -3,6 +3,9 @@ from langchain.schema import OutputParserException, SystemMessage
 import os
 import jieba
 import re
+from opencc import OpenCC
+import requests
+import json
 from db import DBhelper
 from langchain.output_parsers import RetryWithErrorOutputParser
 from func_timeout import func_timeout, FunctionTimedOut
@@ -19,6 +22,11 @@ from langchain.chat_models import AzureChatOpenAI
 import datetime
 from utils.AI_customer_service_utils import translation_stw, fetch_url_response, shorten_url
 import pandas as pd
+
+
+def translation_stw(text):
+    cc = OpenCC('likr-s2twp')
+    return cc.convert(text)
 
 
 def cost_time(func):
@@ -571,8 +579,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 print(f"gpt回答失敗{gpt_response}")
         print(json_gpt_answer)
         print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
-        gpt_answer = translation_stw(json_gpt_answer.get('answer')).replace('，\n', '，')
-
+        gpt_answer = json_gpt_answer.get('answer').replace('，\n', '，')
         gpt_time = time.time() - gpt_start
         answer = adjust_ans_format(gpt_answer)
         answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id])
@@ -585,7 +592,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         print(f"""{hash_}:整理後回答：{answer}""")
         update_history_df(web_id, user_id, message, answer, keyword, keyword_list, keyword_time+search_time+query_time+gpt_time, now_timestamps)
         print(f"{hash_}花費時間k={keyword_time}, s={search_time}, q={query_time}, g={gpt_time}")
-        return answer
+        return translation_stw(answer)
 
         # # history/continue
         # # to be add......print(flags)
