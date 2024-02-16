@@ -28,7 +28,7 @@ class ChatGPT_AVD:
         self.openai_client = self.set_openai_client()
 
     def get_keys(func):
-        def inner(self, message, model="gpt-3.5-turbo", timeout=60, debug=False, json_format=False, azure=True):
+        def inner(self, message, model="gpt-3.5-turbo", timeout=60, debug=False, json_format=False, azure=True, temperature=None):
             if azure:
                 if model == "gpt-4":
                     model_name = 'chat-cs-canada-4'
@@ -43,10 +43,10 @@ class ChatGPT_AVD:
                 else:
                     model_name = "chat-cs-canada-35"
                 if debug:
-                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
                 else:
                     try:
-                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
                     except:
                         res = 'timeout'
             else:
@@ -65,10 +65,10 @@ class ChatGPT_AVD:
                 else:
                     model_name = "gpt-3.5-turbo-1106"
                 if debug:
-                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                    res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
                 else:
                     try:
-                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure))
+                        res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
                     except:
                         res = 'timeout'
 
@@ -91,7 +91,7 @@ class ChatGPT_AVD:
 
 
     @get_keys
-    def ask_gpt(self, message: str, model: str, json_format: bool = False, azure: bool = True) -> str:
+    def ask_gpt(self, message: str, model: str, json_format: bool = False, azure: bool = True, temperature: float = None) -> str:
         if azure:
             if model == "chat-cs-canada-text":
                 response = self.AZURE_client.embeddings.create(input=message, model=model)
@@ -99,6 +99,8 @@ class ChatGPT_AVD:
             kwargs = {'model': model}
             if json_format:
                 kwargs['response_format'] = {"type": "json_object"}
+            if temperature:
+                kwargs['temperature'] = temperature
             kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
             response = self.AZURE_client.chat.completions.create(**kwargs)
         else:
@@ -108,6 +110,8 @@ class ChatGPT_AVD:
             kwargs = {'model': model}
             if json_format:
                 kwargs['response_format'] = {"type": "json_object"}
+            if temperature:
+                kwargs['temperature'] = temperature
             kwargs['messages'] = [{'role': 'user', 'content': message}] if type(message) == str else message
             response = self.openai_client.chat.completions.create(**kwargs)
         return response.choices[0].message.content
