@@ -127,7 +127,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         tr = True
         lang = AI_judge.check_lang(message)
         print(f'{group_id}:分析出的語言是：{lang}')
-        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語']:
+        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话']:
             if i in lang:
                 tr = False
                 lang = '繁體中文'
@@ -170,7 +170,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         types = 6
     print(f'回傳判斷：{custom_judge}')
     print(f'judge判斷時間{time.time()-start}')
-    return types, reply, lang
+    return types, translation_stw(reply), lang
 
 # @app.get("/AI_Search", tags=["AI_Search"])
 # def AI_serch(web_id:str='',message:str=''):
