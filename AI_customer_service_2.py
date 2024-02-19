@@ -426,7 +426,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         if web_id in ['avividai', 'AviviD']:
             url_contact = 'https://www.avividai.com/contact-8'
             if '客服人員' in answer:
-                answer = answer.replace('客服人員', '專人')
+                answer = answer.replace('客服人員', '專員')
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
         for url in url_set:
             if url.split('.')[-1] in ['html/']:
@@ -590,6 +590,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     print('無法回答,或者有敏感內容')
                     break
                 print(f"gpt回答失敗,gpt回傳：{gpt_response}")
+                if gpt_response == '敏感詞':
+                    print('替換敏感內容')
+                    gpt_query[1]['content'] = gpt_query[1]['content'].split('Given Information:')[0] + f'Given Information:{self.CONFIG[main_web_id]["description"]}' + '\nUse the given information to' + gpt_query[1]['content'].split('Use the given information to')[-1]
+                    print(f'變更後的prompt:{gpt_query}')
         print(json_gpt_answer)
         print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
         gpt_answer = json_gpt_answer.get('answer').replace('，\n', '，')
