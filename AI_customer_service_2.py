@@ -82,7 +82,7 @@ class LangchainSetting:
                                     
                                     4. 'greeting': Customers may initiate a conversation with a simple greeting or introduction. 
                                     
-                                    5. 'expression_of_gratitude': Customers express gratitude for the assistance they have received. 
+                                    5. 'expression_of_gratitude_or_end': Customers express gratitude for the assistance they have received or indicate that the conversation is complete. For example, "OK","好","no problem," or "thank you."
                                     
                                     6. 'unknown_intent': The customer's intent is unclear, or the scenario doesn't fit any of the categories above. 
                                     
@@ -342,8 +342,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         else:
             recommend = f"""謝謝您對我們的關注!如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
                 [ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
-            print(lang)
             recommend = self.translate(lang, recommend)
+            recommend = translation_stw(recommend)
         DBhelper.ExecuteUpdatebyChunk(
             pd.DataFrame(
                 [[web_id,main_web_id ,group_id, status, recommend, types, int(datetime.datetime.timestamp(datetime.datetime.now()))]],
@@ -417,18 +417,25 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         gpt_query += [{'role': 'user', 'content': chatgpt_query}]
         return gpt_query, links
 
-    def adjust_ans_url_format(self, answer: str, links: list, config: dict) -> str:
+    def adjust_ans_url_format(self, answer: str, links: list, config: dict, web_id: str) -> str:
         if not isinstance(links, list):
             if links == '':
                 links = []
             else:
                 links = [links]
+        if web_id in ['avividai', 'AviviD']:
+            url_contact = 'https://www.avividai.com/contact-8'
+            if '客服人員' in answer:
+                answer = answer.replace('客服人員', '專人')
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
         for url in url_set:
             if url.split('.')[-1] in ['html/']:
                 answer = answer.replace(url, f"[{self.url_format(url[:-1])}]")
             else:
                 answer = answer.replace(url, f"[{self.url_format(url)}]")
+        if web_id in ['avividai', 'AviviD'] and ('專員' in answer or '專人' in answer) and url_contact not in url_set:
+            answer += f"[{self.url_format(url_contact)}]\n"
+            return answer
         for i in links:
             if i not in url_set:
                 if i.split('.')[-1] in ['html/']:
@@ -582,7 +589,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         gpt_answer = json_gpt_answer.get('answer').replace('，\n', '，')
         gpt_time = time.time() - gpt_start
         answer = adjust_ans_format(gpt_answer)
-        answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id])
+        answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id], main_web_id)
         if main_web_id in {'AviviD', 'avividai'}:
             if user_id not in self.avivid_user:
                 self.avivid_user.add(user_id)

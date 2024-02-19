@@ -1,5 +1,5 @@
 import time
-
+import re
 from fastapi import FastAPI
 import sys
 from utils.log import logger
@@ -116,6 +116,8 @@ def ai_description(title: str = ''):
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
+    if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
+        return 5, '很高興能解決您的問題,祝您愉快！', '繁體中文'
     start = time.time()
     main_web_id = web_id if main_web_id == '' else main_web_id
     status = check_status(web_id, group_id)
@@ -158,7 +160,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 4
-    elif custom_judge == 'expression_of_gratitude':
+    elif custom_judge == 'expression_of_gratitude_or_end':
         reply += '很高興能解決您的問題,祝您愉快！'
         if tr:
             reply = AI_judge.translate(lang, reply)
