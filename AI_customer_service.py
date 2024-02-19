@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import os, traceback, re, json, time
 import pandas as pd
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 from datetime import datetime
 from func_timeout import func_timeout
 import jieba
@@ -47,8 +47,10 @@ class ChatGPT_AVD:
                 else:
                     try:
                         res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
+                    except BadRequestError:
+                        res = '敏感詞'
                     except:
-                        res = 'timeout'
+                        res = '時間或者其他原因'
             else:
                 if model == "gpt-4":
                     model_name = 'gpt-4'
@@ -69,8 +71,10 @@ class ChatGPT_AVD:
                 else:
                     try:
                         res = func_timeout(timeout, func, (self, message, model_name, json_format, azure, temperature))
+                    except BadRequestError:
+                        res = '敏感詞'
                     except:
-                        res = 'timeout'
+                        res = '其他原因'
 
             return res
         return inner

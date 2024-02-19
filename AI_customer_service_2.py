@@ -572,6 +572,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         gpt_start = time.time()
         print(f"""{hash_}:gpt輸入system：{gpt_query[0]['content']}""")
         print(f"""{hash_}:gpt輸入user：{gpt_query[1]['content']}""")
+        k = 0
         while True:
             try:
                 # if web_id in {'AviviD', 'avividai'}:
@@ -583,7 +584,12 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     raise
                 break
             except:
-                print(f"gpt回答失敗{gpt_response}")
+                k += 1
+                if k == 10:
+                    json_gpt_answer = {'answer': '此問題目前找不到解答或者無法回答,將有專人為您服務', 'Reference_links_used': []}
+                    print('無法回答,或者有敏感內容')
+                    break
+                print(f"gpt回答失敗,gpt回傳：{gpt_response}")
         print(json_gpt_answer)
         print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
         gpt_answer = json_gpt_answer.get('answer').replace('，\n', '，')
