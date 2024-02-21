@@ -423,6 +423,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 links = []
             else:
                 links = [links]
+        answer += '\n\n請問還有其他問題嗎？'
         if web_id in ['avividai', 'AviviD']:
             url_contact = 'https://www.avividai.com/contact-8'
             if '客服人員' in answer:

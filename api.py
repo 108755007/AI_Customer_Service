@@ -156,7 +156,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     elif custom_judge == 'greeting':
         if status:
             reply += '你好！'
-        reply += '謝謝您對我們的關注,祝您愉快！'
+        reply += '謝謝您對我們的關注,祝您愉快！\n請問您有什麼問題嗎？'
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 4
