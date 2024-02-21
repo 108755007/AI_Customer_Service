@@ -423,7 +423,6 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 links = []
             else:
                 links = [links]
-        answer += '\n\n請問還有其他問題嗎？'
         if web_id in ['avividai', 'AviviD']:
             url_contact = 'https://www.avividai.com/contact-8'
             if '客服人員' in answer:
@@ -601,6 +600,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         gpt_time = time.time() - gpt_start
         answer = adjust_ans_format(gpt_answer)
         answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id], main_web_id)
+        answer += '\n\n請問還有其他問題嗎？'
         if main_web_id in {'AviviD', 'avividai'}:
             if user_id not in self.avivid_user:
                 self.avivid_user.add(user_id)
