@@ -135,13 +135,13 @@ def ai_description(title: str = ''):
 
 @app.get("/judge", tags=["judge"])
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
-    beg, pi, rt, ge, gr, end, oth = judge_text[web_id]
+    main_web_id = web_id if main_web_id == '' else main_web_id
+    beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
     start = time.time()
-    main_web_id = web_id if main_web_id == '' else main_web_id
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
     tr = False
