@@ -28,4 +28,4 @@ def shorten_url(auth, token, name, url):
     if response.get('code') == 200 and type(response.get('message')) == dict:
         return response.get('message').get('short_url')
     else:
-        return None
+        return url

@@ -77,10 +77,31 @@ def get_tag_embedding():
         question_emb_tensor[web_id] = torch.tensor(emb)
     return ans_dict, question_emb_tensor
 
+def get_judge_text():
+    q = f"""SELECT web_id,beginning ,product_inquiry ,return_or_exchange_request ,general_inquiry ,greeting ,expression_of_gratitude_or_end ,other FROM AI_service_config"""
+    data = DBhelper('jupiter_new').ExecuteSelect(q)
+    dic = {}
+    for web_id, a, b, c, d, e, f, g in data:
+        if a == '_':
+            a = "您好，我是客服機器人小禾！"
+        if b == '_':
+            b = "正在為您查詢商品,稍等一下呦！"
+        if c == '_':
+            c = "將為您提供退換貨說明,請稍待～"
+        if d == '_':
+            d = "請稍等,將為您提供相關資訊！"
+        if e == '_':
+            e = "謝謝您對我們的關注,祝您愉快！\n請問有什麼需要我幫忙解答的嗎？"
+        if f == '_':
+            f = "很高興能解決您的問題,祝您愉快！"
+        if g == '_':
+            g = "請稍候一下我們將盡快為您解答"
+        dic[web_id] = [a, b, c, d, e, f, g]
+    return dic
+
 
 a_dict, q_emb_tensor = get_tag_embedding()
-
-
+judge_text = get_judge_text()
 @app.get("/AI_service", tags=["AI_service"])
 def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文', main_web_id: str = '', types: int = 1):
     if web_id == '' or message == '' or group_id == '':
@@ -114,17 +135,18 @@ def ai_description(title: str = ''):
 
 @app.get("/judge", tags=["judge"])
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
+    beg, pi, rt, ge, gr, end, oth = judge_text[web_id]
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
-        return 5, '很高興能解決您的問題,祝您愉快！', '繁體中文'
+        return 5, end, '繁體中文'
     start = time.time()
     main_web_id = web_id if main_web_id == '' else main_web_id
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
     tr = False
     lang = '繁體中文'
-    reply = "" if status else "您好，我是客服機器人小禾！"
+    reply = "" if status else beg
     if main_web_id in ['avividai', 'AviviD']:
         tr = True
         lang = AI_judge.check_lang(message)
@@ -139,34 +161,34 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
             lang = '繁體中文'
     custom_judge = AI_judge.get_judge_test(message)
     if custom_judge == 'product_inquiry':
-        reply += '正在為您查詢商品,稍等一下呦！'
+        reply += pi
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 1
     elif custom_judge == 'return_or_exchange_request':
-        reply += '將為您提供退換貨說明,請稍待～'
+        reply += rt
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 2
     elif custom_judge == 'general_inquiry':
-        reply += '請稍等,將為您提供相關資訊！'
+        reply += ge
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 3
     elif custom_judge == 'greeting':
         if status:
             reply += '你好！'
-        reply += '謝謝您對我們的關注,祝您愉快！\n請問有什麼需要我幫忙解答的嗎？'
+        reply += gr
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 4
     elif custom_judge == 'expression_of_gratitude_or_end':
-        reply += '很高興能解決您的問題,祝您愉快！'
+        reply += end
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 5
     else:  # Unable to determine intent or other
-        reply += '請稍候一下我們將盡快為您解答'
+        reply += oth
         if tr:
             reply = AI_judge.translate(lang, reply)
         types = 6
