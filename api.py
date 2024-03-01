@@ -54,7 +54,8 @@ app = FastAPI(title="hodo_ai", description=description, openapi_tags=tags_metada
 # _AI_Search = AI_Search()
 AI_judge = AICustomerAPI()
 
-
+lang_dict = {'繁體中文': ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话'],
+             '英文': ['英文', 'lang']}
 
 def check_status(web_id, group_id):
     timestamp = int(datetime.datetime.now().timestamp()) - 60
@@ -77,11 +78,13 @@ def get_tag_embedding():
         question_emb_tensor[web_id] = torch.tensor(emb)
     return ans_dict, question_emb_tensor
 
+
 def get_judge_text():
-    q = f"""SELECT web_id,beginning ,product_inquiry ,return_or_exchange_request ,general_inquiry ,greeting ,expression_of_gratitude_or_end ,other FROM AI_service_config"""
+    q = f"""SELECT web_id,beginning ,product_inquiry ,return_or_exchange_request ,general_inquiry ,greeting ,expression_of_gratitude_or_end ,other,nativelang FROM AI_service_config"""
     data = DBhelper('jupiter_new').ExecuteSelect(q)
     dic = {}
-    for web_id, a, b, c, d, e, f, g in data:
+    native_lang = {}
+    for web_id, a, b, c, d, e, f, g, lang in data:
         if a == '_':
             a = "您好，我是客服機器人小禾！"
         if b == '_':
@@ -98,14 +101,17 @@ def get_judge_text():
             f = "很高興能解決您的問題,祝您愉快！"
         if g == '_':
             g = "請稍候一下我們將盡快為您解答"
+        native_lang[web_id] = lang
         dic[web_id] = [a, b, c, d, e, f, g]
-    return dic
+    return dic, native_lang
 
 
 a_dict, q_emb_tensor = get_tag_embedding()
-judge_text = get_judge_text()
+judge_text, native_lang = get_judge_text()
+
+
 @app.get("/AI_service", tags=["AI_service"])
-def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '中文', main_web_id: str = '', types: int = 1):
+def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '繁體中文', main_web_id: str = '', types: int = 1):
     if web_id == '' or message == '' or group_id == '':
         return {"message": "no sentence input or no web_id", "message": ""}
     return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id, types=types)
@@ -146,53 +152,53 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     start = time.time()
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
-    tr = False
-    lang = '繁體中文'
+
+    n_lang = native_lang[main_web_id]
     reply = "" if status else beg
-    if main_web_id in ['avividai', 'AviviD']:
-        tr = True
-        lang = AI_judge.check_lang(message)
-        print(f'{group_id}:分析出的語言是：{lang}')
-        for i in ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话']:
-            if i in lang:
-                tr = False
-                lang = '繁體中文'
-                break
-        if translation_stw(message) != message:
+    #if main_web_id in ['avividai', 'AviviD']: //全部開放
+    tr = True
+    lang = AI_judge.check_lang(message)
+    print(f'{group_id}:分析出的語言是：{lang},母語是:{n_lang}')
+    for i in lang_dict.get(n_lang):
+        if i in lang:
             tr = False
-            lang = '繁體中文'
+            lang = n_lang
+            break
+    if translation_stw(message) != message:
+        tr = False
+        lang = '繁體中文'
     custom_judge = AI_judge.get_judge_test(message)
     if custom_judge == 'product_inquiry':
         reply += pi
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 1
     elif custom_judge == 'return_or_exchange_request':
         reply += rt
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 2
     elif custom_judge == 'general_inquiry':
         reply += ge
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 3
     elif custom_judge == 'greeting':
         if status:
             reply += '你好！'
         reply += gr
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 4
     elif custom_judge == 'expression_of_gratitude_or_end':
         reply += end
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 5
     else:  # Unable to determine intent or other
         reply += oth
         if tr:
-            reply = AI_judge.translate(lang, reply)
+            reply = AI_judge.translate(n_lang, reply, lang)
         types = 6
     print(f'回傳判斷：{custom_judge}')
     print(f'judge判斷時間{time.time()-start}')

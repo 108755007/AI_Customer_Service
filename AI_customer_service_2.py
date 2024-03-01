@@ -205,6 +205,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         self.url_format = lambda x: ' ' + shorten_url(auth=self.auth, token=self.token,
                                                       name=self.frontend + '_gpt_customer_service', url=x) + ' '
         self.user_id_index = 0
+        self.lang_dict = {
+            '繁體中文': ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话'],
+            '英文': ['英文', 'lang']}
 
     def azure_openai_setting(self):
         os.environ['OPENAI_API_KEY'] = self.AZURE_OPENAI_CONFIG.get('api_key')
@@ -253,7 +256,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         # segmentation
         # print(message)
         k = 0
-        if web_id in {'AviviD', 'avividai'} and lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語', '']:
+        if lang != self.CONFIG[web_id]['nativelang'] and lang not in ['英文']:
             print("###關鍵字需要變成英文###")
             while True:
                 if k > 10:
@@ -292,6 +295,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
                 if len(keyword_list) == 0 and not repeat:
                     raise
+                if len(keyword_list) == 0 and repeat:
+                    keyword_list = [k for k in analyse.extract_tags(message, topK=2) if k in message and not any(re.search(w, k) for w in forbidden_words)]
                 print(f"gpt成功獲取關鍵字{keyword_list}")
                 break
             except:
@@ -328,7 +333,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         #     gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         return translation_stw(ans)
 
-    def update_recommend_status(self, web_id: str, group_id: str, status: int, product={}, lang='中文', main_web_id='', types=1):
+    def update_recommend_status(self, web_id: str, group_id: str, status: int, product={}, lang='繁體中文', main_web_id='', types=1):
         main_web_id = web_id if not main_web_id else main_web_id
         if main_web_id not in {'AviviD', 'avividai'}:
             if status == 1 and not product:
@@ -342,8 +347,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         else:
             recommend = f"""謝謝您對我們的關注!如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
                 [ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
-            recommend = self.translate(lang, recommend)
-            recommend = translation_stw(recommend)
+        if lang != self.CONFIG[main_web_id]['nativelang']:
+            recommend = self.translate(self.CONFIG[main_web_id]['nativelang'], recommend, lang)
+        recommend = translation_stw(recommend)
         DBhelper.ExecuteUpdatebyChunk(
             pd.DataFrame(
                 [[web_id,main_web_id ,group_id, status, recommend, types, int(datetime.datetime.timestamp(datetime.datetime.now()))]],
@@ -466,23 +472,26 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                                      {'role': 'user', 'content': message}], json_format=True)
         return eval(lang).get("input_language_type")
 
-    def translate(self, lang, out):
-        if lang not in ['Chinese', '中文', '繁體中文', 'chinese', '國語', '']:
-            m = f"""Source Text: "{out}"
-                Source Language: 繁體中文
-                Target Language: {lang}"""
+    def translate(self, lang, out, n_lang='繁體中文'):
+        if lang != n_lang:
+            print(f"進行翻譯{lang} to {n_lang}")
+            m = f"""Source Text: {out},
+                Source Language: {lang},
+                Target Language: {n_lang}"""
             out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
                                 {'role': 'user', 'content': m}], json_format=True, timeout=120)
             return eval(out).get('target_text')
         return out
 
-    def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='中文', main_web_id='', types=1):
+    def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='繁體中文', main_web_id='', types=1):
         main_web_id = web_id if not main_web_id else main_web_id
         hash_ = str(abs(hash(str(user_id) + message)))[:6]
         hash_ = user_id
+        n_lang = self.CONFIG[main_web_id]['nativelang']
         now_timestamps = int(datetime.datetime.timestamp(datetime.datetime.now()))
         print(f"{hash_},輸入訊息：{message}")
         print(f"{hash_},輸入的語言：{lang}")
+        print(f"{hash_},母語：{n_lang}")
         keyword_list, keyword_time = self.get_keyword(message, main_web_id, lang)
         if isinstance(keyword_list, str):
             print(f'{hash_},獲取關鍵字錯誤')
@@ -605,8 +614,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             if user_id not in self.avivid_user:
                 self.avivid_user.add(user_id)
                 answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
-            print(f'{hash_}:輸入語言種類：{lang}')
-            answer = self.translate(lang, answer)
+        print(f'{hash_}:輸入語言種類：{lang}')
+        answer = self.translate(n_lang, answer, lang)
         print(f"""{hash_}:整理後回答：{answer}""")
         update_history_df(web_id, user_id, message, answer, keyword, keyword_list, keyword_time+search_time+query_time+gpt_time, now_timestamps)
         print(f"{hash_}花費時間k={keyword_time}, s={search_time}, q={query_time}, g={gpt_time}")
