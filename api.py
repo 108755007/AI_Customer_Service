@@ -54,7 +54,7 @@ app = FastAPI(title="hodo_ai", description=description, openapi_tags=tags_metada
 # _AI_Search = AI_Search()
 AI_judge = AICustomerAPI()
 
-lang_dict = {'繁體中文': ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话'],
+lang_dict = {'繁體中文': ['chinese', 'Chinese', '中文', '國語', '繁體中文', '简体中文', '簡體中文', '漢語', '普通話', '普通话', '汉语'],
              '英文': ['英文', 'lang']}
 
 def check_status(web_id, group_id):
@@ -185,9 +185,11 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         types = 3
     elif custom_judge == 'greeting':
         if status:
-            reply += '你好！'
+            reply += AI_judge.translate('繁體中文', '你好！', n_lang)
         reply += gr
-        if tr:
+        if "hi" in message.lower() or "hello" in message.lower():
+            reply = reply + '\n' + AI_judge.translate(n_lang, reply, 'english')
+        elif tr:
             reply = AI_judge.translate(n_lang, reply, lang)
         types = 4
     elif custom_judge == 'expression_of_gratitude_or_end':

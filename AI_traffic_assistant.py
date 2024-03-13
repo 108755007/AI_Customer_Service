@@ -26,10 +26,11 @@ class Util(QA_api):
         self.dateint = self.get_data_intdate(7)
         self.azure_openai_setting()
         self.langchain_model_setting()
-        self.chat_check_model = AzureChatOpenAI(azure_deployment="chat-cs-canada-4", temperature=0, openai_api_version="2023-12-01-preview")
-        self.article_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35', openai_api_version="2023-12-01-preview")
-        self.article_model_16k = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35-16k', openai_api_version="2023-12-01-preview")
-        self.article_4_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-4', openai_api_version="2023-12-01-preview")
+        self.api_version = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_version')
+        self.chat_check_model = AzureChatOpenAI(azure_deployment="chat-cs-canada-4", temperature=0, openai_api_version=self.api_version)
+        self.article_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35', openai_api_version=self.api_version)
+        self.article_model_16k = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-35-16k', openai_api_version=self.api_version)
+        self.article_4_model = AzureChatOpenAI(temperature=0.2, azure_deployment='chat-cs-canada-4', openai_api_version=self.api_version)
 
     def get_data_intdate(self, time_delay):
         return int(str(datetime.date.today() - datetime.timedelta(time_delay)).replace('-', ''))
