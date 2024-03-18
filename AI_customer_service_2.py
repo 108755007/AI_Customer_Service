@@ -448,6 +448,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     answer = answer.replace(url, f"[{self.url_format(url)}]")
                     if url in links:
                         links.remove(url)
+            if "likrrobot1@avividai.com" in answer:
+                answer = answer.replace("likrrobot1@avividai.com", "<likrrobot1@avividai.com>")
         if web_id in ['avividai', 'AviviD'] and ('專員' in answer or '專人' in answer) and url_contact not in url_set:
             answer += f"[{self.url_format(url_contact)}]\n"
             return answer
