@@ -168,6 +168,8 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         tr = False
         lang = '繁體中文'
     custom_judge = AI_judge.get_judge_test(message)
+    if 'ok' in message.lower() and len(message) < 5:
+        custom_judge == 'expression_of_gratitude_or_end'
     if custom_judge == 'product_inquiry':
         reply += pi
         if tr:
@@ -187,14 +189,16 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         if status:
             reply += AI_judge.translate('繁體中文', '你好！', n_lang)
         reply += gr
-        if "hi" in message.lower() or "hello" in message.lower():
+        if "hi" in message.lower() or "hello" in message.lower() or "ok" in message.lower():
             reply = reply + '\n' + AI_judge.translate(n_lang, reply, 'english')
         elif tr:
             reply = AI_judge.translate(n_lang, reply, lang)
         types = 4
     elif custom_judge == 'expression_of_gratitude_or_end':
         reply += end
-        if tr:
+        if "ok" in message.lower() or "thank" in message.lower():
+            reply = reply + '\n' + AI_judge.translate(n_lang, reply, 'english')
+        elif tr:
             reply = AI_judge.translate(n_lang, reply, lang)
         types = 5
     else:  # Unable to determine intent or other
