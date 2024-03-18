@@ -429,16 +429,25 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 links = []
             else:
                 links = [links]
-        if web_id in ['avividai', 'AviviD']:
-            url_contact = 'https://www.avividai.com/contact-8'
-            if '客服人員' in answer:
-                answer = answer.replace('客服人員', '專員')
+
         url_set = sorted(list(set(re.findall(r'https?:\/\/[\w\.\-\?/=+&#$%^;%_]+\/', answer))), key=len, reverse=True)
         for url in url_set:
+            if url == "https://reurl.cc/":
+                continue
             if url.split('.')[-1] in ['html/']:
                 answer = answer.replace(url, f"[{self.url_format(url[:-1])}]")
             else:
                 answer = answer.replace(url, f"[{self.url_format(url)}]")
+        if web_id in ['avividai', 'AviviD']:
+            url_contact = 'https://www.avividai.com/contact-8'
+            if '客服人員' in answer:
+                answer = answer.replace('客服人員', '專員')
+            for url in ["https://reurl.cc/OGa76X", "https://reurl.cc/krb6rL", "https://reurl.cc/37Az7l",
+                        "https://reurl.cc/XqrzmR", "https://forms.gle/SwFax1vPhygCDNbZA"]:
+                if url in answer:
+                    answer = answer.replace(url, f"[{self.url_format(url)}]")
+                    if url in links:
+                        links.remove(url)
         if web_id in ['avividai', 'AviviD'] and ('專員' in answer or '專人' in answer) and url_contact not in url_set:
             answer += f"[{self.url_format(url_contact)}]\n"
             return answer
