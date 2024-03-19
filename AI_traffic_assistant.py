@@ -391,6 +391,8 @@ class AiTraffic(Util):
                 result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sub_title_prompt},
                                                        {'role': 'user', 'content': f'{title}'}], json_format=True)
                 sub_title_dict = eval(result)
+                if not sub_title_dict.get('sub_title_1'):
+                    raise
                 break
             except:
                 if k == 10:
