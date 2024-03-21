@@ -145,16 +145,31 @@ class Util(QA_api):
         # noinspection PyBroadException
         try:
             gpt_res = output_parser.parse(output.content)
+            if not sub_list:
+                res = [gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace('文章內容:', '')]
+            else:
+                res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
+            for i in res:
+                if not i:
+                    raise
         except:
-            print('產生失敗！！,重新產生')
-            retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model_16k)
-            gpt_res = retry_parser.parse_with_prompt(output.content, _input)
-        if not sub_list:
-            res = [
-                gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace(
-                    '文章內容:', '')]
-        else:
-            res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
+            k = 0
+            while True:
+                print('產生失敗！！,重新產生')
+                if k > 5:
+                    print("產生超失敗")
+                    return []
+                retry_parser = RetryWithErrorOutputParser.from_llm(parser=output_parser, llm=self.article_model_16k)
+                gpt_res = retry_parser.parse_with_prompt(output.content, _input)
+                if not sub_list:
+                    res = [gpt_res['Articles'].replace('文章標題：', '').replace('文章標題:', '').replace('文章內容：', '').replace('文章內容:', '')]
+                else:
+                    res = [v.replace(f'{i}。', '').replace(f'{i}', '') for i, v in zip(sub_list, gpt_res.values())]
+                for i in res:
+                    if not i:
+                        k += 1
+                        continue
+                break
         return res
 
     def get_generate_articles_prompt(self, title, sub_list, keyword_info_dict, ta_setting, eng=False):
@@ -293,7 +308,7 @@ class AiTraffic(Util):
 
     def get_keyword_pd(self):
         pbar = tqdm(list(self.web_id_dict.keys()))
-        #pbar = tqdm(['innolife', 'nineyi000360'])
+        pbar = tqdm(['innolife', 'nineyi000360'])
         for i, web_id in enumerate(pbar):
             pbar.set_description(web_id)
             self.all_keyword_pd[web_id] = self.get_keyword_data(web_id)
