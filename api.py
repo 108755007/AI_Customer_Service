@@ -3,6 +3,7 @@ import re
 from fastapi import FastAPI
 import sys
 from utils.log import logger
+import regex
 from dotenv import load_dotenv
 import datetime
 import torch
@@ -63,6 +64,14 @@ def check_status(web_id, group_id):
     data = DBhelper('jupiter_new').ExecuteSelect(q)
     return True if data[0][0] else False
 
+
+
+def is_pure_emoji(text):
+    # 使用正则表达式匹配 emoji
+    emoji_pattern = regex.compile("[\p{Emoji_Presentation}\p{Extended_Pictographic}]", flags=regex.UNICODE)
+    emojis = emoji_pattern.findall(text)
+    # 如果字符串长度等于 emoji 数量，则为纯 emoji
+    return len(text) == len(emojis)
 
 def get_tag_embedding():
     q = f"""SELECT web_id, question, ans,question_embedding  FROM AI_service_similarity"""
@@ -149,6 +158,15 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
+    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message):
+        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
+        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
+
+        if native_lang[main_web_id] != 'english':
+            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
+
+        return 7, reply+'\n'+eng_reply, None
+
     start = time.time()
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
