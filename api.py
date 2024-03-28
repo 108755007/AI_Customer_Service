@@ -65,20 +65,19 @@ def check_status(web_id, group_id):
     return True if data[0][0] else False
 
 
-def is_emoji(character):
-    # 表情符號的 Unicode 區段
-    emoji_ranges = [
-        (0x1F600, 0x1F64F),  # Emoticons
-        (0x1F300, 0x1F5FF),  # Miscellaneous Symbols and Pictographs
-        (0x1F680, 0x1F6FF),  # Transport and Map Symbols
-        (0x1F1E0, 0x1F1FF),  # Flags (iOS)
-        (0x2600, 0x26FF),    # Miscellaneous Symbols
-        (0x2700, 0x27BF),    # Dingbats
-    ]
-    for start, end in emoji_ranges:
-        if ord(character) in range(start, end + 1):
-            return True
-    return False
+def is_only_emoji(text):
+    # 定义表情符号的正则表达式
+    emoji_pattern = re.compile("["
+                           u"\U0001F600-\U0001F64F"  # emoticons
+                           u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+                           u"\U0001F680-\U0001F6FF"  # transport & map symbols
+                           u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+                           u"\U00002702-\U000027B0"
+                           u"\U000024C2-\U0001F251"
+                           "]+", flags=re.UNICODE)
+    # 使用全匹配模式
+    return bool(emoji_pattern.fullmatch(text))
+
 
 def is_pure_emoji(text):
     # 使用正则表达式匹配 emoji
@@ -169,7 +168,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     main_web_id = web_id if main_web_id == '' else main_web_id
     beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
     print(message)
-    print(is_emoji(message))
+    print(is_only_emoji(message))
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
