@@ -68,7 +68,7 @@ def check_status(web_id, group_id):
 
 def is_all_emoji(text):
     # Check if each character is an emoji
-    filtered_text = ''.join(char for char in text if char not in emoji.EMOJI_DATA)
+    filtered_text = ''.join(char for char in text if char not in emoji.EMOJI_DATA and char not in [b'\xef\xb8\x8e'.decode(), b'\xef\xb8\x8f'.decode()])
     if len(filtered_text) > 0:
         return filtered_text
     return False
