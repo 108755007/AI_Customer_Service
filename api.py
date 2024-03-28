@@ -73,7 +73,9 @@ def isemoji(content):
         (u"\U0001F600", u"\U0001F64F"),  # emoticons
         (u"\U0001F300", u"\U0001F5FF"),  # symbols & pictographs
         (u"\U0001F680", u"\U0001F6FF"),  # transport & map symbols
-        (u"\U0001F1E0", u"\U0001F1FF")  # flags (iOS)
+        (u"\U0001F1E0", u"\U0001F1FF"),# flags (iOS)
+        (u"\U00002702", u"\U000027B0"),
+        (u"\U000024C2", u"\U0001F251")
     ]
 
     for char in content:
