@@ -167,13 +167,11 @@ def ai_description(title: str = ''):
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
     main_web_id = web_id if main_web_id == '' else main_web_id
     beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
-    print(message)
-    print(is_only_emoji(message))
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
-    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message):
+    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message) or is_only_emoji(message):
         reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
         eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
 
