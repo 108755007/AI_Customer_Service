@@ -66,6 +66,14 @@ def check_status(web_id, group_id):
     return True if data[0][0] else False
 
 
+def is_pure_emoji(text):
+    # 使用正则表达式匹配 emoji
+    emoji_pattern = regex.compile("[\p{Emoji_Presentation}\p{Extended_Pictographic}]", flags=regex.UNICODE)
+    emojis = emoji_pattern.findall(text)
+    # 如果字符串长度等于 emoji 数量，则为纯 emoji
+    return len(text) == len(emojis)
+
+
 def is_all_emoji(text):
     # Check if each character is an emoji
     filtered_text = ''.join(char for char in text if char not in emoji.EMOJI_DATA and char not in [b'\xef\xb8\x8e'.decode(), b'\xef\xb8\x8f'.decode()])
@@ -155,17 +163,19 @@ def ai_description(title: str = ''):
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = '', message_type: str = 'text'):
     main_web_id = web_id if main_web_id == '' else main_web_id
     beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
-    if message.isdigit():
-        return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
-    if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
-        return 5, end, '繁體中文'
     message = is_all_emoji(message)
-    if not message or message_type != 'text':
+
+    if not message or message_type != 'text' or re.match(r'(^\(\w.+\)$)', message):
         reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
         eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
         if native_lang[main_web_id] != 'english':
             reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
         return 7, reply + '\n' + eng_reply, None
+
+    if message.isdigit():
+        return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
+    if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
+        return 5, end, '繁體中文'
 
     start = time.time()
     status = check_status(web_id, group_id)
