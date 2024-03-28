@@ -65,35 +65,7 @@ def check_status(web_id, group_id):
     return True if data[0][0] else False
 
 
-def isemoji(content):
-    if not content:
-        return False
 
-    emoji_pattern = [
-        (u"\U0001F600", u"\U0001F64F"),  # emoticons
-        (u"\U0001F300", u"\U0001F5FF"),  # symbols & pictographs
-        (u"\U0001F680", u"\U0001F6FF"),  # transport & map symbols
-        (u"\U0001F1E0", u"\U0001F1FF"),# flags (iOS)
-        (u"\U00002702", u"\U000027B0"),
-        (u"\U000024C2", u"\U0001F251")
-    ]
-
-    for char in content:
-        is_emoji = False
-        for start, end in emoji_pattern:
-            if start <= char <= end:
-                is_emoji = True
-                break
-        if not is_emoji:
-            return False
-    return True
-
-def is_pure_emoji(text):
-    # 使用正则表达式匹配 emoji
-    emoji_pattern = regex.compile("[\p{Emoji_Presentation}\p{Extended_Pictographic}]", flags=regex.UNICODE)
-    emojis = emoji_pattern.findall(text)
-    # 如果字符串长度等于 emoji 数量，则为纯 emoji
-    return len(text) == len(emojis)
 
 def get_tag_embedding():
     q = f"""SELECT web_id, question, ans,question_embedding  FROM AI_service_similarity"""
@@ -173,21 +145,14 @@ def ai_description(title: str = ''):
 
 
 @app.get("/judge", tags=["judge"])
-def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = ''):
+def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = '', message_type: str = 'text'):
     main_web_id = web_id if main_web_id == '' else main_web_id
     beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
-    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message) or isemoji(message):
-        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
-        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
 
-        if native_lang[main_web_id] != 'english':
-            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
-
-        return 7, reply+'\n'+eng_reply, None
 
     start = time.time()
     status = check_status(web_id, group_id)
@@ -199,6 +164,13 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     tr = True
     lang = AI_judge.check_lang(message)
     print(f'{group_id}:分析出的語言是：{lang},母語是:{n_lang}')
+    if lang == "emoji" or lang.lower() == "emoji" or message_type != 'text':
+        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
+        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
+        if native_lang[main_web_id] != 'english':
+            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
+        return 7, reply + '\n' + eng_reply, None
+
     for i in lang_dict.get(n_lang):
         if i in lang:
             tr = False

@@ -134,6 +134,7 @@ class LangchainSetting:
                                     1. Provide the type or family of the language based on the input phrase.
                                     2. Your response must be in valid JSON format.
                                     3. Do not respond with "unknown" under any circumstances. If the input is ambiguous or unclear, give your best estimate based on the available data.
+                                    4. If all the messages are composed entirely of emoji characters, please return the language as "emoji". Note: it should consist entirely of emoji characters to return as such.
                                     
                                     Here is an input phrase for analysis:
                                     "請分析輸入的語言並確定其所屬的語言系統或種類。"
