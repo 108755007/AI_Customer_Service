@@ -65,19 +65,26 @@ def check_status(web_id, group_id):
     return True if data[0][0] else False
 
 
-def is_only_emoji(text):
-    # 定义表情符号的正则表达式
-    emoji_pattern = re.compile("["
-                           u"\U0001F600-\U0001F64F"  # emoticons
-                           u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-                           u"\U0001F680-\U0001F6FF"  # transport & map symbols
-                           u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
-                           u"\U00002702-\U000027B0"
-                           u"\U000024C2-\U0001F251"
-                           "]+", flags=re.UNICODE)
-    # 使用全匹配模式
-    return bool(emoji_pattern.fullmatch(text))
+def isemoji(content):
+    if not content:
+        return False
 
+    emoji_pattern = [
+        (u"\U0001F600", u"\U0001F64F"),  # emoticons
+        (u"\U0001F300", u"\U0001F5FF"),  # symbols & pictographs
+        (u"\U0001F680", u"\U0001F6FF"),  # transport & map symbols
+        (u"\U0001F1E0", u"\U0001F1FF")  # flags (iOS)
+    ]
+
+    for char in content:
+        is_emoji = False
+        for start, end in emoji_pattern:
+            if start <= char <= end:
+                is_emoji = True
+                break
+        if not is_emoji:
+            return False
+    return True
 
 def is_pure_emoji(text):
     # 使用正则表达式匹配 emoji
@@ -171,7 +178,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
-    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message) or is_only_emoji(message):
+    if message.split('_')[-1] in ['ANIMATION', 'STATIC', 'POPUP'] or re.match(r'(^\(\w.+\)$)', message) or message.startswith('http') or is_pure_emoji(message) or isemoji(message):
         reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
         eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
 
