@@ -6,6 +6,7 @@ from utils.log import logger
 import regex
 from dotenv import load_dotenv
 import datetime
+import emoji
 import torch
 import collections
 from db import DBhelper
@@ -65,6 +66,12 @@ def check_status(web_id, group_id):
     return True if data[0][0] else False
 
 
+def is_all_emoji(text):
+    # Check if each character is an emoji
+    filtered_text = ''.join(char for char in text if char not in emoji.EMOJI_DATA)
+    if len(filtered_text) > 0:
+        return filtered_text
+    return False
 
 
 def get_tag_embedding():
@@ -152,7 +159,13 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
     if re.sub('[^\u4e00-\u9fa5]+', '', message) == '好':
         return 5, end, '繁體中文'
-
+    message = is_all_emoji(message)
+    if not message or message_type != 'text':
+        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
+        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
+        if native_lang[main_web_id] != 'english':
+            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
+        return 7, reply + '\n' + eng_reply, None
 
     start = time.time()
     status = check_status(web_id, group_id)
@@ -164,12 +177,6 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     tr = True
     lang = AI_judge.check_lang(message)
     print(f'{group_id}:分析出的語言是：{lang},母語是:{n_lang}')
-    if lang == "emoji" or lang.lower() == "emoji" or message_type != 'text':
-        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
-        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
-        if native_lang[main_web_id] != 'english':
-            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
-        return 7, reply + '\n' + eng_reply, None
 
     for i in lang_dict.get(n_lang):
         if i in lang:
