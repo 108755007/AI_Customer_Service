@@ -258,10 +258,11 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         k = 0
         if lang != self.CONFIG[web_id]['nativelang'] and lang not in ['英文']:
             print("###關鍵字需要變成英文###")
-            while True:
+            while k < 10:
                 if k > 10:
                     break
                 try:
+                    k += 1
                     m = f"""Source Text: "{message}"
                         Source Language: {lang}
                         Target Language: English"""
@@ -275,14 +276,17 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     break
                 except:
                     k += 1
+                k += 1
         last_reply = ''
-        while True:
+        k = 0
+        while k < 10:
             repeat = False
-            if k > 10:
+            if k > 8:
                 print('關鍵字獲取錯誤,使用切割')
                 keyword_list = analyse.extract_tags(message, topK=2)
                 break
             try:
+                k += 1
                 reply = self.ask_gpt(message=[{'role': 'system', 'content': self.get_keyword_prompt},
                                               {'role': 'user', 'content': f'{message}'}], json_format=True)
                 if reply == 'timeout':
@@ -593,8 +597,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         print(f"""{hash_}:gpt輸入system：{gpt_query[0]['content']}""")
         print(f"""{hash_}:gpt輸入user：{gpt_query[1]['content']}""")
         k = 0
-        while True:
+        while k < 10:
             try:
+                k += 1
                 # if web_id in {'AviviD', 'avividai'}:
                 #     gpt_response = self.ask_gpt(gpt_query, model='avividai', timeout=60, json_format=True,azure=False)
                 # else:
@@ -605,7 +610,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 break
             except:
                 k += 1
-                if k == 10:
+                if k == 7:
                     json_gpt_answer = {'answer': '此問題目前找不到解答或者無法回答,將有專人為您服務', 'Reference_links_used': []}
                     print('無法回答,或者有敏感內容')
                     break
@@ -614,6 +619,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     print('替換敏感內容')
                     gpt_query[1]['content'] = gpt_query[1]['content'].split('Given Information:')[0] + f'Given Information:{self.CONFIG[main_web_id]["description"]}' + '\nUse the given information to' + gpt_query[1]['content'].split('Use the given information to')[-1]
                     print(f'變更後的prompt:{gpt_query}')
+            k += 1
         print(json_gpt_answer)
         print(f"""{hash_}:gpt回答：{json_gpt_answer.get('answer')}""")
         gpt_answer = json_gpt_answer.get('answer').replace('，\n', '，')
