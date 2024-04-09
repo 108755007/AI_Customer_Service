@@ -339,7 +339,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
 
     def update_recommend_status(self, web_id: str, group_id: str, status: int, product={}, lang='繁體中文', main_web_id='', types=1):
         main_web_id = web_id if not main_web_id else main_web_id
-        if main_web_id not in {'AviviD', 'avividai'}:
+        if main_web_id not in {'AviviD', 'avividai_demo'}:
             if status == 1 and not product:
                 hot_product = self.Recommend.fetch_hot_rank(web_id=main_web_id)
                 if hot_product:
@@ -442,7 +442,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 answer = answer.replace(url, f"[{self.url_format(url[:-1])}]")
             else:
                 answer = answer.replace(url, f"[{self.url_format(url)}]")
-        if web_id in ['avividai', 'AviviD']:
+        if web_id in ['avividai_demo', 'AviviD']:
             url_contact = 'https://www.avividai.com/contact-8'
             if '客服人員' in answer:
                 answer = answer.replace('客服人員', '專員')
@@ -454,7 +454,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                         links.remove(url)
             if "likrrobot1@avividai.com" in answer:
                 answer = answer.replace("likrrobot1@avividai.com", "<likrrobot1@avividai.com>")
-        if web_id in ['avividai', 'AviviD'] and ('專員' in answer or '專人' in answer) and url_contact not in url_set:
+        if web_id in ['avividai_demo', 'AviviD'] and ('專員' in answer or '專人' in answer) and url_contact not in url_set:
             answer += f"[{self.url_format(url_contact)}]\n"
             return answer
         for i in links:
@@ -530,7 +530,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         print(f"{hash_},google搜尋結果,類別：{result[1]},使用的關鍵字為:{keyword}")
 
         query_start = time.time()
-        if main_web_id in {'AviviD', 'avividai'}:
+        if main_web_id in {'AviviD', 'avividai_demo'}:
             search_result = result[0][:3]
             if search_result:
                 gpt_query, links = self.get_gpt_query_test(search_result, message, self.CONFIG[main_web_id])
@@ -627,7 +627,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         answer = adjust_ans_format(gpt_answer)
         answer = self.adjust_ans_url_format(answer, json_gpt_answer['Reference_links_used'], self.CONFIG[main_web_id], main_web_id)
         answer += '\n\n請問還有其他問題嗎？'
-        if main_web_id in {'AviviD', 'avividai'}:
+        if main_web_id in {'AviviD', 'avividai_demo'}:
             if user_id not in self.avivid_user:
                 self.avivid_user.add(user_id)
                 answer += """如果您有任何疑問，麻煩留下聯絡訊息，我們很樂意為您提供幫助。\n\n聯絡人：\n電話：\n方便聯絡的時間：\n\n至於收費方式由於選擇方案的不同會有所差異，還請您務必填寫表單以留下資訊，我們將由專人進一步與您聯絡！表單連結：https://forms.gle/S4zkJynXj5wGq6Ja9"""
