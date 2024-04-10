@@ -337,8 +337,13 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         #     gpt_res = retry_parser.parse_with_prompt(output.content, _input)
         return translation_stw(ans)
 
-    def update_recommend_status(self, web_id: str, group_id: str, status: int, product={}, lang='繁體中文', main_web_id='', types=1):
+    def update_recommend_status(self, web_id: str, group_id: str, status: int, product={}, lang='繁體中文', main_web_id='', types=1, text_config={}):
         main_web_id = web_id if not main_web_id else main_web_id
+        judge_text = text_config.get(main_web_id)
+        if not judge_text or judge_text[-2] == '_':
+            recommend = """謝謝您對我們的關注!如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品"""
+        else:
+            recommend = judge_text[-2]
         if main_web_id not in {'AviviD', 'avividai_demo'}:
             if status == 1 and not product:
                 hot_product = self.Recommend.fetch_hot_rank(web_id=main_web_id)
@@ -346,11 +351,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     product = random.choice(hot_product)
                 else:
                     product = {'title': '我們的官方網站', 'link': self.CONFIG[main_web_id]['web_url']}
-            recommend = f"""謝謝您對我們的關注!如果您想了解更多我們最熱銷的產品，歡迎逛逛我們為您精選的其他商品：
-                - 【{product.get('title')} [ {self.url_format(product.get('link'))} ]"""
+            recommend += f"""\n【{product.get('title')} [ {self.url_format(product.get('link'))} ]"""
         else:
-            recommend = f"""謝謝您對我們的關注!如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品：
-                [ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
+            recommend += f"""\n[ {self.url_format("https://avivid.ai/product/acquisition")} ]"""
         if lang != self.CONFIG[main_web_id]['nativelang']:
             recommend = self.translate(self.CONFIG[main_web_id]['nativelang'], recommend, lang)
         recommend = translation_stw(recommend)
@@ -498,7 +501,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             return eval(out).get('target_text')
         return out
 
-    def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='繁體中文', main_web_id='', types=1):
+    def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='繁體中文', main_web_id='', types=1, text_config={}):
         main_web_id = web_id if not main_web_id else main_web_id
         hash_ = str(abs(hash(str(user_id) + message)))[:6]
         hash_ = user_id
@@ -534,10 +537,10 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             search_result = result[0][:3]
             if search_result:
                 gpt_query, links = self.get_gpt_query_test(search_result, message, self.CONFIG[main_web_id])
-                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id, types=types)
+                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id, types=types,text_config=text_config)
             else:
                 gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
-                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id, types=types)
+                self.update_recommend_status(web_id, user_id, 1, {}, lang, main_web_id=main_web_id, types=types,text_config=text_config)
 
         else:
             product_result, search_result, common = self.Recommend.likr_recommend(search_result=result[0],
@@ -568,29 +571,29 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     if common:  # 推薦成功機率高
                         gpt_query, links = self.get_gpt_query_test(common[:1], message, self.CONFIG[main_web_id])
                         if len(common) > 1:
-                            self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id, types=types)
+                            self.update_recommend_status(web_id, user_id, 1, common[-1], main_web_id=main_web_id, types=types,text_config=text_config)
                         else:
-                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types)
+                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types,text_config=text_config)
                     elif search_result:  # google可能亂給
                         gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
-                        self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types)
+                        self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types,text_config=text_config)
                     elif product_result:  # 通常是推薦商品
                         gpt_query, links = self.get_gpt_query_test(product_result[:1], message, self.CONFIG[main_web_id])
                         if len(product_result) > 1:
-                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types)
+                            self.update_recommend_status(web_id, user_id, 1, recommend_product, main_web_id=main_web_id, types=types,text_config=text_config)
                         else:
-                            self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types)
+                            self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types,text_config=text_config)
                     else:
                         print(f'{hash_},找不到商品')
                         gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
-                        self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types)
+                        self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types,text_config=text_config)
 
                 else:
                     if search_result:
                         gpt_query, links = self.get_gpt_query_test(search_result[:2], message, self.CONFIG[main_web_id])
                     else:
                         gpt_query, links = self.get_gpt_query_test([], message, self.CONFIG[main_web_id])
-                    self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types)
+                    self.update_recommend_status(web_id, user_id, 1, {}, main_web_id=main_web_id, types=types,text_config=text_config)
 
         query_time = time.time() - query_start
         gpt_start = time.time()

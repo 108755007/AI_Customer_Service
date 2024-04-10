@@ -37,6 +37,10 @@ tags_metadata = [
         "description": "judge"
     },
     {
+        "name": "judge2",
+        "description": "judge"
+    },
+    {
         "name": "get_product",
         "description": "update_status"
     },
@@ -98,11 +102,11 @@ def get_tag_embedding():
 
 
 def get_judge_text():
-    q = f"""SELECT web_id,beginning ,product_inquiry ,return_or_exchange_request ,general_inquiry ,greeting ,expression_of_gratitude_or_end ,other,nativelang FROM AI_service_config"""
+    q = f"""SELECT web_id,beginning ,product_inquiry ,return_or_exchange_request ,general_inquiry ,greeting ,expression_of_gratitude_or_end ,other,end_recommend,img_not_support,nativelang FROM AI_service_config"""
     data = DBhelper('jupiter_new').ExecuteSelect(q)
     dic = {}
     native_lang = {}
-    for web_id, a, b, c, d, e, f, g, lang in data:
+    for web_id, a, b, c, d, e, f, g, h, i, lang in data:
         if a == '_':
             a = "您好，我是客服機器人小禾！"
         if b == '_':
@@ -119,8 +123,12 @@ def get_judge_text():
             f = "很高興能解決您的問題,祝您愉快！"
         if g == '_':
             g = "請稍候一下我們將盡快為您解答"
+        if h == '_':
+            h = "謝謝您對我們的關注！\n如果您想了解更多我們禾多的產品服務，歡迎逛逛我們產品："
+        if i == '_':
+            i = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
         native_lang[web_id] = lang
-        dic[web_id] = [a, b, c, d, e, f, g]
+        dic[web_id] = [a, b, c, d, e, f, g, h, i]
     return dic, native_lang
 
 
@@ -132,15 +140,20 @@ judge_text, native_lang = get_judge_text()
 def ai_service(web_id: str = '', message: str = '', group_id: str = '', product: bool = True, lang: str = '繁體中文', main_web_id: str = '', types: int = 1):
     if web_id == '' or message == '' or group_id == '':
         return {"message": "no sentence input or no web_id", "message": ""}
-    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id, types=types)
+    return AI_judge.qa(web_id, message, group_id, find_dpa=product, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
 
 
 @app.get("/update_product", tags=["get_product"])
 def ai_update_product(web_id: str = '', group_id: str = '', lang='繁體中文', main_web_id: str = '', types: int = 1):
     main_web_id = web_id if main_web_id == '' else main_web_id
-    AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types)
+    AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
     return 'ok'
 
+@app.get("/judge2", tags=["judge2"])
+def ai_update_product2(web_id: str = '', group_id: str = '', main_web_id: str = '', types: int = 1, lang='繁體中文'):
+    main_web_id = web_id if main_web_id == '' else main_web_id
+    AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
+    return 'ok'
 
 @app.get("/similarity", tags=["similarity"])
 def get_similarity_avivid(web_id: str = '', group_id: str = '', text: str = ''):
@@ -162,15 +175,14 @@ def ai_description(title: str = ''):
 @app.get("/judge", tags=["judge"])
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = '', message_type: str = 'text'):
     main_web_id = web_id if main_web_id == '' else main_web_id
-    beg, pi, rt, ge, gr, end, oth = judge_text[main_web_id]
+    beg, pi, rt, ge, gr, end, oth, endr, img = judge_text[main_web_id]
     message = is_all_emoji(message)
-
+    n_lang = native_lang[main_web_id]
     if not message or message_type != 'text' or re.match(r'(^\(\w.+\)$)', message):
-        reply = "親愛的顧客您好，客服機器人小禾只懂文字敘述，若您有需要協助解答的問題，請協助提供文字提問，小禾將儘快提供回應！"
-        eng_reply = "Dear customer, hello! I am the customer service chatbot. I only understand text descriptions. If you need assistance or have any questions, please provide your query in text form, and I will respond as quickly as possible!"
-        if native_lang[main_web_id] != 'english':
-            reply = AI_judge.translate('繁體中文', reply, native_lang[main_web_id])
-        return 7, reply + '\n' + eng_reply, None
+        reply = img
+        if n_lang != 'english':
+            reply = reply + '\n' + AI_judge.translate(n_lang, reply, 'english')
+        return 7, reply, None
 
     if message.isdigit():
         return 7, "親愛的顧客您好，請您再次描述問題細節，謝謝！\nDear customer, Please provide further details regarding the issue once again. Thank you!", None
@@ -181,7 +193,7 @@ def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', ma
     status = check_status(web_id, group_id)
     print(f'{group_id}:的狀態是{status}')
 
-    n_lang = native_lang[main_web_id]
+
     reply = "" if status else beg
     #if main_web_id in ['avividai', 'AviviD']: //全部開放
     tr = True
