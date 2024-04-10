@@ -37,8 +37,8 @@ tags_metadata = [
         "description": "judge"
     },
     {
-        "name": "judge2",
-        "description": "judge"
+        "name": "update_product2",
+        "description": "update_product2"
     },
     {
         "name": "get_product",
@@ -144,13 +144,14 @@ def ai_service(web_id: str = '', message: str = '', group_id: str = '', product:
 
 
 @app.get("/update_product", tags=["get_product"])
-def ai_update_product(web_id: str = '', group_id: str = '', lang='繁體中文', main_web_id: str = '', types: int = 1):
+def ai_update_product(web_id: str = '', group_id: str = '', lang: str = '繁體中文', main_web_id: str = '', types: int = 1):
     main_web_id = web_id if main_web_id == '' else main_web_id
     AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
     return 'ok'
 
-@app.get("/judge2", tags=["judge2"])
-def ai_update_product2(web_id: str = '', group_id: str = '', main_web_id: str = '', types: int = 1, lang='繁體中文'):
+
+@app.get("/update_product2", tags=["update_product2"])
+def ai_update_product2(web_id: str = '', group_id: str = '', main_web_id: str = '', types: int = 1, lang: str = '繁體中文'):
     main_web_id = web_id if main_web_id == '' else main_web_id
     AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
     return 'ok'
