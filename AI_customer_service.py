@@ -265,8 +265,10 @@ class QA_api:
         '''
         config_dict = {}
         config = DBhelper('jupiter_new').ExecuteSelect("SELECT * FROM web_push.AI_service_config where mode != 0;")
-        config_col = [i[0] for i in
-                      DBhelper('jupiter_new').ExecuteSelect("SHOW COLUMNS FROM web_push.AI_service_config;")]
+        config_col = ['id', 'web_id', 'mode', 'web_name', 'other_name', 'web_url', 'description', 'sub_domain_url', 'qa_url',
+                      'product_url', 'domain_cx', 'qa_cx', 'sub_domain_cx', 'search_cache_days', 'ai_Search', 'nativelang',
+                      'add_time', 'update_time', 'beginning', 'product_inquiry', 'return_or_exchange_request', 'general_inquiry',
+                      'greeting', 'expression_of_gratitude_or_end', 'other', 'end_recommend', 'img_not_support']
         for conf in config:
             config_dict[conf[1]] = {}
             for k, v in zip(config_col, conf):

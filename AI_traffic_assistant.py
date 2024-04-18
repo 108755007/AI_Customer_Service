@@ -308,7 +308,7 @@ class AiTraffic(Util):
 
     def get_keyword_pd(self):
         pbar = tqdm(list(self.web_id_dict.keys()))
-        pbar = tqdm(['innolife', 'nineyi000360'])
+        #pbar = tqdm(['innolife'])
         for i, web_id in enumerate(pbar):
             pbar.set_description(web_id)
             self.all_keyword_pd[web_id] = self.get_keyword_data(web_id)

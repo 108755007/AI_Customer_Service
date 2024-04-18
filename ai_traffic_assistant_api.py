@@ -3,6 +3,8 @@ from AI_traffic_assistant import AiTraffic
 import pandas as pd
 from web_id_similarity import web_id_similarity
 from db import DBhelper
+from slackwarningletter import slack_warning
+
 description = """
 traffic_assistant
 author:Yu
@@ -36,9 +38,12 @@ tags_metadata = [
 ]
 
 app = FastAPI(title="traffic_assistant", description=description, openapi_tags=tags_metadata)
-
-AI_traffic = AiTraffic()
-
+slack_letter = slack_warning()
+try:
+    AI_traffic = AiTraffic()
+    slack_letter.send_letter(f'流量小編生文執行成功 <@U03AD4B5D0C>')
+except:
+    slack_letter.send_letter(f'流量小編生文生文失敗 <@U03AD4B5D0C>')
 
 @app.get("/title", tags=["generate_title"])
 def title(web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_main: str = '', article: str = '', types: int = 1, eng: bool = False):
