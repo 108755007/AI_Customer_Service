@@ -446,7 +446,7 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
             else:
                 answer = answer.replace(url, f"[{self.url_format(url)}]")
         if web_id in ['avividai_demo', 'avividservice']:
-            url_contact = 'https://www.avividai.com/contact-8'
+            url_contact = "https://www.avividai.com/%E5%B0%88%E4%BA%BA%E8%AB%AE%E8%A9%A2"
             if '客服人員' in answer:
                 answer = answer.replace('客服人員', '專員')
             for url in ["https://reurl.cc/OGa76X", "https://reurl.cc/krb6rL", "https://reurl.cc/37Az7l",
