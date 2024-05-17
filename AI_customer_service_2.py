@@ -222,7 +222,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
         ]
         ans = self.ask_gpt(message=messages)
         try:
-            return eval(ans).get('type').lower()
+            json_string = ans.replace("'", '"')
+            json_data = json.loads(json_string)
+            return json_data.get('type').lower()
         except:
             return 'unknown_intent'
 
@@ -271,7 +273,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     if reply == 'timeout':
                         k += 1
                         continue
-                    message = eval(reply).get('target_text')
+                    json_string = reply.replace("'", '"')
+                    json_data = json.loads(json_string)
+                    message = json_data.get('target_text')
                     print(f"###翻譯後的文本{message}'###")
                     break
                 except:
@@ -296,7 +300,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                     repeat = True
                     print('重複擷取')
                 last_reply = reply
-                keyword_list = [k for _, k in eval(reply).items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
+                json_string = reply.replace("'", '"')
+                json_data = json.loads(json_string)
+                keyword_list = [k for _, k in json_data.items() if k in message and not any(re.search(w, k) for w in forbidden_words)]
                 if len(keyword_list) == 0 and not repeat:
                     raise
                 if len(keyword_list) == 0 and repeat:
@@ -488,7 +494,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
     def check_lang(self, message):
         lang = self.ask_gpt([{'role': 'system', 'content': self.check_lang_prompt},
                                      {'role': 'user', 'content': message}], json_format=True)
-        return eval(lang).get("input_language_type")
+        json_string = lang.replace("'", '"')
+        json_data = json.loads(json_string)
+        return json_data.get("input_language_type")
 
     def translate(self, lang, out, n_lang='繁體中文'):
         if lang != n_lang:
@@ -498,7 +506,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 Target Language: {n_lang}"""
             out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
                                 {'role': 'user', 'content': m}], json_format=True, timeout=120)
-            return eval(out).get('target_text')
+            json_string = out.replace("'", '"')
+            json_data = json.loads(json_string)
+            return json_data.get('target_text')
         return out
 
     def qa(self, web_id: str, message: str, user_id: str, find_dpa=True, lang='繁體中文', main_web_id='', types=1, text_config={}):
@@ -607,7 +617,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 #     gpt_response = self.ask_gpt(gpt_query, model='avividai', timeout=60, json_format=True,azure=False)
                 # else:
                 gpt_response = self.ask_gpt(gpt_query, model='gpt-3.5-turbo', timeout=60, json_format=True, temperature=0.1)
-                json_gpt_answer = eval(gpt_response)
+                json_string = gpt_response.replace("'", '"')
+                json_gpt_answer = json.loads(json_string)
                 if not json_gpt_answer.get('answer'):
                     raise
                 break
