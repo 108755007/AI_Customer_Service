@@ -248,18 +248,18 @@ class AiTraffic(Util):
             if len(df) and key in set(df.keyword):
                 curr_keyword_info = df[df.keyword == key]
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
-                    if self.check_news(title):
-                        keyword_info_dict[key] = (title, content, web_id, article_id, img)
-                        print(f'內站有關鍵字：{key}')
-                        break
+
+                    keyword_info_dict[key] = (title, content, web_id, article_id, img)
+                    print(f'內站有關鍵字：{key}')
+                    break
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
                 for title, content, web_id_article, article_id, img in curr_keyword_info[
                     ['title', 'content', 'web_id', 'url', 'image']].values:
-                    if self.check_news(title):
-                        keyword_info_dict[key] = (title, content, web_id_article, article_id, img)
-                        print(f'外站有關鍵字：{key}')
-                        break
+
+                    keyword_info_dict[key] = (title, content, web_id_article, article_id, img)
+                    print(f'外站有關鍵字：{key}')
+                    break
             else:
                 if len(keyword_list) > 2:
                     t = 0
@@ -290,9 +290,8 @@ class AiTraffic(Util):
                         title = data.get('htmlTitle')
                         sn = data.get('snippet')
                         link = data.get('link')
-                        if self.check_news(title + sn):
-                            keyword_info_dict[key] = (title, sn, 'google', link, '_')
-                            break
+                        keyword_info_dict[key] = (title, sn, 'google', link, '_')
+                        break
                     if key in keyword_info_dict:
                         if i == 0:
                             print(f'google搜尋主要關鍵字{key}')
@@ -355,7 +354,8 @@ class AiTraffic(Util):
                 except:
                     if k == 10:
                         title = '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！'
-                        break
+                        return 'error'
+
                     k += 1
             title = self.translation_stw(title) if not eng else title
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords, title, json.dumps(
@@ -383,7 +383,7 @@ class AiTraffic(Util):
                                  'title_3': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
                                  'title_4': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！',
                                  'title_5': '關鍵字可能包含敏感字詞,請返回上一頁修改並重新產生！'}
-                        break
+                        return 'error'
                     k += 1
             DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([[user_id, web_id, types, keywords,
                                                          self.translation_stw(title['title_1']),
@@ -411,7 +411,7 @@ class AiTraffic(Util):
                 break
             except:
                 if k == 10:
-                    return
+                    return 'error'
                     break
                 k += 1
         print(f"""副標題產生成功,副標題為:{sub_title_dict}""")
