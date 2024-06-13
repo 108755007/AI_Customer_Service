@@ -51,18 +51,22 @@ def title(web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_ma
         return '請輸入文章內容'
     res_list = AI_traffic.get_title(web_id=web_id, user_id=user_id, keywords=keywords, web_id_main=web_id_main, article=article, types=types, eng=eng)
     if res_list == 'error':
-        return {'message': 'sexual', 'code': '100'}
+        sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
+        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        if eng:
+            error_message = AI_traffic.translate('繁體中文', error_message, '英文')
+        return {'message': error_message, 'code': '100'}
     else:
-        return {'res': {i+1: v for i, v in enumerate(res_list)}, 'code': '200'}
+        return {'message': {i+1: v for i, v in enumerate(res_list)}, 'code': '200'}
 
 
 @app.get("/sub-heading", tags=["generate_sub_title"])
 def subtitle(web_id: str = 'test', user_id: str = '', title: str = '', types: int = 1, eng: bool = False):
     res_list = AI_traffic.get_sub_title(title, user_id, web_id, types, eng)
     if res_list == 'error':
-        return {'message': 'sexual', 'code': '100'}
+        return {'message': '可能因為標題過於敏感,造成產生失敗,請輸入不同關鍵字在嘗試一次', 'code': '100'}
     else:
-        return {'res': res_list, 'code': '200'}
+        return {'message': res_list, 'code': '200'}
 
 
 @app.get("/articles", tags=["generate_articles"])
@@ -71,7 +75,11 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
     res = AI_traffic.generate_articles(title=title, keywords=keywords, user_id=user_id, web_id=web_id, types=types,
                                        subtitle_list=[subtitles1, subtitles2, subtitles3, subtitles4, subtitles5], ta=[], eng=eng)
     if not res:
-        return {'message': 'error', 'code': '100'}
+        sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
+        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        if eng:
+            error_message = AI_traffic.translate('繁體中文', error_message, '英文')
+        return {'message': error_message, 'code': '100'}
     columns = ['user_id', 'web_id', 'type']
     update_data = [user_id, web_id, types]
     d = 0
@@ -81,7 +89,7 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
         DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                         columns=columns), db='sunscribe', table='ai_article',
                                       chunk_size=100000, is_ssh=False)
-        return {'res': res, 'code': '200'}
+        return {'message': res, 'code': '200'}
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
             columns.append(f"article_{i+1}")
@@ -90,7 +98,7 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
     DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                                columns=columns), db='sunscribe', table='ai_article',
                                   chunk_size=100000, is_ssh=False)
-    return {'res': res, 'code': '200'}
+    return {'message': res, 'code': '200'}
 
 @app.get("/articles_ta_2", tags=["generate_articles_TA"])
 def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywords: str = '', subtitles1: str = '',
@@ -100,7 +108,11 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
                                        subtitle_list=[subtitles1, subtitles2, subtitles3, subtitles4, subtitles5],
                                        ta=[gender, age, Income, interests, occupation, style], eng=eng)
     if not res:
-        return {'message': 'sexual', 'code': '100'}
+        sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
+        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        if eng:
+            error_message = AI_traffic.translate('繁體中文', error_message, '英文')
+        return {'message': error_message, 'code': '100'}
     columns = ['user_id', 'web_id', 'type']
     update_data = [user_id, web_id, types]
     if not subtitles1 and not subtitles2 and not subtitles3 and not subtitles4 and not subtitles5:
@@ -108,7 +120,7 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
         update_data.append(res[0])
         DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],columns=columns), db='sunscribe', table='ai_article',
                                       chunk_size=100000, is_ssh=False)
-        return {'res': res, 'code': '200'}
+        return {'message': res, 'code': '200'}
     d = 0
     for i, v in enumerate([subtitles1, subtitles2, subtitles3, subtitles4, subtitles5]):
         if v:
@@ -118,7 +130,7 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
     DBhelper.ExecuteUpdatebyChunk(pd.DataFrame([update_data],
                                                columns=columns), db='sunscribe', table='ai_article',
                                   chunk_size=100000, is_ssh=False)
-    return {'res': res, 'code': '200'}
+    return {'message': res, 'code': '200'}
 
 @app.get("/check", tags=["check"])
 def checkdef(test: str = ''):

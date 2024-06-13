@@ -119,9 +119,37 @@ class Util(QA_api):
                                     "sub_title_5": "Your Generated Sub-Title 5"
                                 }
                                 """
+        self.translation_prompt = """You are a helpful assistant designed to output JSON. Translate the provided text into the specified target language and format the translation as a JSON object, including fields for the target text, and target language.  
+                                    Example:
+
+                                    Input:
+                                    Source Text: "Hello, how are you?"
+                                    Source Language: English
+                                    Target Language: Spanish
+
+                                    Output:
+                                    {
+                                      "target_text": "Hola, ¿cómo estás?",
+                                      "target_language": "Spanish"
+                                    }
+                                    """
     def azure_openai_setting(self):
         os.environ["AZURE_OPENAI_API_KEY"] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_key')
         os.environ["AZURE_OPENAI_ENDPOINT"] = self.ChatGPT.AZURE_OPENAI_CONFIG.get('api_base')
+
+
+    def translate(self, lang, out, n_lang='繁體中文'):
+        if lang != n_lang:
+            print(f"進行翻譯{lang} to {n_lang}")
+            m = f"""Source Text: {out},
+                Source Language: {lang},
+                Target Language: {n_lang}"""
+            out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
+                                {'role': 'user', 'content': m}], json_format=True, timeout=120)
+            json_string = out.replace("'", '"')
+            json_data = json.loads(json_string)
+            return json_data.get('target_text')
+        return out
 
     def translation_stw(self, text):
         cc = OpenCC('likr-s2twp')
@@ -311,6 +339,17 @@ class AiTraffic(Util):
         for i, web_id in enumerate(pbar):
             pbar.set_description(web_id)
             self.all_keyword_pd[web_id] = self.get_keyword_data(web_id)
+
+    def check_sensitive_keyword(self, keywords):
+        result = self.ChatGPT.ask_gpt(model='gpt-4o', message=[{'role': 'system', 'content': """你是關健字敏感詞判斷機器人,輸入關鍵字,請回傳敏感字,如果沒有回傳None,json格式回傳,                                {
+                                                                                "Sensitive_keyword":"Sensitive_keyword1,Sensitive_keyword2..." """},
+                                               {'role': 'user', 'content': keywords}], json_format=True,azure=False)
+        json_string = result.replace("'", '"')
+        json_data = json.loads(json_string)
+        return json_data.get("Sensitive_keyword")
+
+
+
 
     def check_news(self, text):
         _input = self.check_prompt.format_prompt(question=text)

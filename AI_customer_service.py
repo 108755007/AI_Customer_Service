@@ -34,6 +34,8 @@ class ChatGPT_AVD:
                     model_name = 'chat-cs-canada-4'
                 elif model == "gpt-3.5-turbo-16k":
                     model_name = "chat-cs-canada-35-16k"
+                elif model == "gpt-4o":
+                    model_name = "gpt-4o"
                 elif model == "gpt-4-32k":
                     model_name = "chat-cs-canada-4-32"
                 elif model == 'gpt-text':
@@ -54,6 +56,8 @@ class ChatGPT_AVD:
             else:
                 if model == "gpt-4":
                     model_name = 'gpt-4'
+                elif model == "gpt-4o":
+                    model_name = "gpt-4o"
                 elif model == "gpt-3.5-turbo-16k":
                     model_name = "gpt-3.5-turbo-16k"
                 elif model == "gpt-4-32k":
