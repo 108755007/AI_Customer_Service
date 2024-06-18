@@ -52,7 +52,7 @@ def title(web_id: str = 'test', user_id: str = '', keywords: str = '', web_id_ma
     res_list = AI_traffic.get_title(web_id=web_id, user_id=user_id, keywords=keywords, web_id_main=web_id_main, article=article, types=types, eng=eng)
     if res_list == 'error':
         sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
-        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        error_message = f'【您輸入的關鍵字疑似涉及敏感字眼，建議替換關鍵字後重試】,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產生錯誤請在嘗試一次'
         if eng:
             error_message = AI_traffic.translate('繁體中文', error_message, '英文')
         return {'message': error_message, 'code': '100'}
@@ -76,7 +76,7 @@ def articles_api(web_id: str = 'test', user_id: str = '', title: str = '', keywo
                                        subtitle_list=[subtitles1, subtitles2, subtitles3, subtitles4, subtitles5], ta=[], eng=eng)
     if not res:
         sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
-        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        error_message = f'【您輸入的關鍵字疑似涉及敏感字眼，建議替換關鍵字後重試】,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產生錯誤請在嘗試一次'
         if eng:
             error_message = AI_traffic.translate('繁體中文', error_message, '英文')
         return {'message': error_message, 'code': '100'}
@@ -109,7 +109,7 @@ def articles_ta(web_id: str = 'test', user_id: str = '', title: str = '', keywor
                                        ta=[gender, age, Income, interests, occupation, style], eng=eng)
     if not res:
         sensitive_keyword = AI_traffic.check_sensitive_keyword(keywords)
-        error_message = f'因敏感詞產生失敗,以下是敏感詞：{sensitive_keyword}' if sensitive_keyword != 'None' else '產失錯誤請在嘗試一次'
+        error_message = f'【您輸入的關鍵字疑似涉及敏感字眼，建議替換關鍵字後重試】：{sensitive_keyword}' if sensitive_keyword != 'None' else '產生錯誤請在嘗試一次'
         if eng:
             error_message = AI_traffic.translate('繁體中文', error_message, '英文')
         return {'message': error_message, 'code': '100'}
