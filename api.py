@@ -172,6 +172,20 @@ def ai_description(title: str = ''):
     res = AI_judge.get_des(title)
     return res
 
+@app.get("/check_lang", tags=["get_description"])
+def ai_check_lang(message: str = ''):
+    res = AI_judge.check_lang(message)
+    if res in lang_dict['繁體中文']:
+        return '繁體中文'
+    return res
+
+@app.get("/translate", tags=["get_description"])
+def ai_translate(message: str = '', lang_source='繁體中文', lang: str = '英文'):
+    res = AI_judge.translate(lang_source, message, lang)
+    return res
+
+
+
 
 @app.get("/judge", tags=["judge"])
 def ai_service_judge(web_id: str = '', group_id: str = '', message: str = '', main_web_id: str = '', message_type: str = 'text'):
