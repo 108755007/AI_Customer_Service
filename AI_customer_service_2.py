@@ -494,8 +494,8 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
     def check_lang(self, message):
         lang = self.ask_gpt([{'role': 'system', 'content': self.check_lang_prompt},
                                      {'role': 'user', 'content': message}], json_format=True)
-        json_string = lang.replace("'", '"')
-        json_data = json.loads(json_string)
+        #json_string = lang.replace("'", '"')
+        json_data = json.loads(lang)
         return json_data.get("input_language_type")
 
     def translate(self, lang, out, n_lang='繁體中文'):
@@ -506,8 +506,9 @@ class AICustomerAPI(ChatGPT_AVD, LangchainSetting):
                 Target Language: {n_lang}"""
             out = self.ask_gpt([{'role': 'system', 'content': self.translation_prompt},
                                 {'role': 'user', 'content': m}], json_format=True, timeout=120)
-            json_string = out.replace("'", '"')
-            json_data = json.loads(json_string)
+            print(out)
+            #json_string = out.replace("'", '"')
+            json_data = json.loads(out)
             return json_data.get('target_text')
         return out
 
