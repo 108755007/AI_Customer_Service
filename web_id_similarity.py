@@ -1,14 +1,20 @@
 from db import DBhelper
 import pandas as pd
 import collections
-
+import datetime
 
 def web_id_similarity():
+    date = int((datetime.datetime.utcnow() - datetime.timedelta(days=30)).strftime("%Y%m%d"))
     query = f"""SELECT DISTINCT web_id,tag from all_website_category_tag_2"""
     tag_web_id = DBhelper('sunscribe').ExecuteSelect(query=query)
+    query = f"""SELECT DISTINCT web_id FROM dione.pageview_record_day x WHERE `date` >= {date}"""
+    web_id_online = {i[0] for i in  DBhelper('dione').ExecuteSelect(query=query)}
+
+
     tag_dict = collections.defaultdict(set)
     for web_id, tag in tag_web_id:
-        tag_dict[web_id].add(tag)
+        if web_id in web_id_online:
+            tag_dict[web_id].add(tag)
     ans = collections.defaultdict(list)
     for i, v in tag_dict.items():
         for j, vv in tag_dict.items():
