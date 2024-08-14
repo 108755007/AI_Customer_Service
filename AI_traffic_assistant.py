@@ -275,19 +275,34 @@ class AiTraffic(Util):
         for key in keyword_list:
             if len(df) and key in set(df.keyword):
                 curr_keyword_info = df[df.keyword == key]
+                best_match = None
                 for title, content, article_id, img in curr_keyword_info[['title', 'content', 'url', 'image']].values:
+                    if any(len(set(other_key) & set(title))/len(set(other_key)) > 0.8 for other_key in keyword_list if other_key != key):
+                        best_match = (title, content, web_id, article_id, img)
+                        print(f'找到標題包含其他關鍵字的：{key} -> {title}')
+                        break  # 一旦找到包含其他關鍵字的標題就停止
 
-                    keyword_info_dict[key] = (title, content, web_id, article_id, img)
-                    print(f'內站有關鍵字：{key}')
-                    break
+                # 如果沒有找到包含其他關鍵字的標題，則使用第一個條目
+                if not best_match:
+                    title, content, article_id, img = curr_keyword_info.iloc[0][['title', 'content', 'url', 'image']].values
+                    best_match = (title, content, web_id, article_id, img)
+                    print(f'未找到其他關鍵字,使用內站關鍵字：{key} -> {title}')
+                keyword_info_dict[key] = best_match
             elif key in self.keyword_all_set:
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
-                for title, content, web_id_article, article_id, img in curr_keyword_info[
-                    ['title', 'content', 'web_id', 'url', 'image']].values:
+                best_match = None
+                for title, content, web_id_article, article_id, img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
+                    if any(len(set(other_key) & set(title))/len(set(other_key)) > 0.8 in title for other_key in keyword_list if other_key != key):
+                        best_match = (title, content, web_id_article, article_id, img)
+                        print(f'找到標題包含其他的外站關鍵字：{key} -> {title}')
+                        break  # 一旦找到包含其他關鍵字的標題就停止
 
-                    keyword_info_dict[key] = (title, content, web_id_article, article_id, img)
-                    print(f'外站有關鍵字：{key}')
-                    break
+                # 如果沒有找到包含其他關鍵字的標題，則使用第一個條目
+                if not best_match:
+                    title, content, web_id_article, article_id, img = curr_keyword_info.iloc[0][['title', 'content', 'web_id', 'url', 'image']].values
+                    best_match = (title, content, web_id, article_id, img)
+                    print(f'未找到標題包含其他的外站關鍵字：{key} -> {title}')
+                keyword_info_dict[key] = best_match
             else:
                 if len(keyword_list) > 2:
                     t = 0
@@ -318,8 +333,14 @@ class AiTraffic(Util):
                         title = data.get('htmlTitle')
                         sn = data.get('snippet')
                         link = data.get('link')
-                        keyword_info_dict[key] = (title, sn, 'google', link, '_')
-                        break
+
+                        # 檢查標題或摘要中是否包含其他關鍵字
+                        if key in title:
+                            best_match = (title, sn, 'google', link, '_')
+                            print(f'google找到標題包含關鍵字的：{key} -> {title}')
+                            keyword_info_dict[key] = best_match
+                            break  # 一旦找到符合條件的項目就停止
+
                     if key in keyword_info_dict:
                         if i == 0:
                             print(f'google搜尋主要關鍵字{key}')
@@ -387,7 +408,7 @@ class AiTraffic(Util):
                 try:
 
                     result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sys_prompt},
-                                                  {'role': 'user', 'content': f'{prompt}'}], json_format=True)
+                                                  {'role': 'user', 'content': f'{prompt}'}], json_format=True, model="gpt-4o")
                     title = eval(result).get('title')
                     break
                 except:
