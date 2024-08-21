@@ -292,7 +292,7 @@ class AiTraffic(Util):
                 curr_keyword_info = self.media_keyword_pd[self.media_keyword_pd.keyword == key]
                 best_match = None
                 for title, content, web_id_article, article_id, img in curr_keyword_info[['title', 'content', 'web_id', 'url', 'image']].values:
-                    if any(len(set(other_key) & set(title))/len(set(other_key)) > 0.8 in title for other_key in keyword_list if other_key != key):
+                    if any(len(set(other_key) & set(title))/len(set(other_key)) > 0.8 for other_key in keyword_list if other_key != key):
                         best_match = (title, content, web_id_article, article_id, img)
                         print(f'找到標題包含其他的外站關鍵字：{key} -> {title}')
                         break  # 一旦找到包含其他關鍵字的標題就停止
