@@ -402,13 +402,13 @@ class AiTraffic(Util):
             web_id, keywords)
         prompt = ''.join([f""" "keyword":{i}\n "description":{v}\n\n""" for i, v in keyword_info_dict.items()])
         if types == 1:
-            sys_prompt = self.title_1_prompt + "\nPlease respond in language entered. The JSON output should follow this format" if eng else self.title_1_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
+            sys_prompt = self.title_1_prompt + """\nPlease respond in the language of the entered keywords.ex:"keyword":สวัสดี ,respond is "Thai" ,The JSON output should follow this format""" if eng else self.title_1_prompt + "\nPlease respond in traditional Chinese. The JSON output should follow this format"
             k = 0
             while True:
                 try:
 
                     result = self.ChatGPT.ask_gpt(message=[{'role': 'system', 'content': sys_prompt},
-                                                  {'role': 'user', 'content': f'{prompt}'}], json_format=True, model="gpt-4o")
+                                                  {'role': 'user', 'content': f'{prompt}'}],model='gpt-4o' ,json_format=True)
                     title = eval(result).get('title')
                     break
                 except:
