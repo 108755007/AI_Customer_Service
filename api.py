@@ -7,10 +7,10 @@ import regex
 from dotenv import load_dotenv
 import datetime
 import emoji
-import torch
+#import torch
 import collections
 from db import DBhelper
-import torch.nn.functional as F
+#import torch.nn.functional as F
 from AI_customer_service_2 import translation_stw
 
 sys.path.append("..")
@@ -86,19 +86,19 @@ def is_all_emoji(text):
     return False
 
 
-def get_tag_embedding():
-    q = f"""SELECT web_id, question, ans,question_embedding  FROM AI_service_similarity"""
-    print('讀取embedding資料中.....')
-    ans_dict = collections.defaultdict(list)
-    question_emb = collections.defaultdict(list)
-    data = DBhelper('jupiter_new').ExecuteSelect(q)
-    for web_id, question, ans, question_embedding in data:
-        ans_dict[web_id].append((question, ans))
-        question_emb[web_id].append(eval(question_embedding))
-    question_emb_tensor = {}
-    for web_id, emb in question_emb.items():
-        question_emb_tensor[web_id] = torch.tensor(emb)
-    return ans_dict, question_emb_tensor
+# def get_tag_embedding():
+#     q = f"""SELECT web_id, question, ans,question_embedding  FROM AI_service_similarity"""
+#     print('讀取embedding資料中.....')
+#     ans_dict = collections.defaultdict(list)
+#     question_emb = collections.defaultdict(list)
+#     data = DBhelper('jupiter_new').ExecuteSelect(q)
+#     for web_id, question, ans, question_embedding in data:
+#         ans_dict[web_id].append((question, ans))
+#         question_emb[web_id].append(eval(question_embedding))
+#     question_emb_tensor = {}
+#     for web_id, emb in question_emb.items():
+#         question_emb_tensor[web_id] = torch.tensor(emb)
+#     return ans_dict, question_emb_tensor
 
 
 def get_judge_text():
@@ -132,7 +132,7 @@ def get_judge_text():
     return dic, native_lang
 
 
-a_dict, q_emb_tensor = get_tag_embedding()
+#a_dict, q_emb_tensor = get_tag_embedding()
 judge_text, native_lang = get_judge_text()
 
 
@@ -156,15 +156,15 @@ def ai_update_product2(web_id: str = '', group_id: str = '', main_web_id: str = 
     AI_judge.update_recommend_status(web_id, group_id, 1, lang=lang, main_web_id=main_web_id, types=types, text_config=judge_text)
     return 'ok'
 
-@app.get("/similarity", tags=["similarity"])
-def get_similarity_avivid(web_id: str = '', group_id: str = '', text: str = ''):
-    if web_id not in q_emb_tensor:
-        return
-    emb = AI_judge.ask_gpt(message=text, model='gpt-text')
-    cos_sim_curr = F.cosine_similarity(q_emb_tensor[web_id], torch.tensor(emb), dim=1)
-    if float(cos_sim_curr.topk(1).values[0]) > 0.9:
-        print(f'資料庫有相似問題：{a_dict[web_id][int(cos_sim_curr.topk(1).indices[0])][0]}')
-        return a_dict[web_id][int(cos_sim_curr.topk(1).indices[0])][1]
+# @app.get("/similarity", tags=["similarity"])
+# def get_similarity_avivid(web_id: str = '', group_id: str = '', text: str = ''):
+#     if web_id not in q_emb_tensor:
+#         return
+#     emb = AI_judge.ask_gpt(message=text, model='gpt-text')
+#     cos_sim_curr = F.cosine_similarity(q_emb_tensor[web_id], torch.tensor(emb), dim=1)
+#     if float(cos_sim_curr.topk(1).values[0]) > 0.9:
+#         print(f'資料庫有相似問題：{a_dict[web_id][int(cos_sim_curr.topk(1).indices[0])][0]}')
+#         return a_dict[web_id][int(cos_sim_curr.topk(1).indices[0])][1]
 
 
 @app.get("/get_description", tags=["get_description"])
